@@ -1,5 +1,7 @@
 const EventEmitter = require('events');
-const { ActionItem, Decision, VisualArtifact } = require('../models/Insight');
+const { upsertMinuteWindow } = require('../repositories/minuteRepository');
+const { batchCreateInsights } = require('../repositories/insightRepository');
+const { createVisual } = require('../repositories/visualRepository');
 const LLMService = require('./LLMService');
 const VisualEngine = require('./VisualEngine');
 
@@ -22,7 +24,15 @@ class SimulationService extends EventEmitter {
         this.intervalId = null;
     }
 
-    startSimulation(meetingId, io) {
+    /**
+     * Start simulation for a meeting
+     * Writes directly to Firestore (no Socket.IO)
+     * 
+     * Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6
+     * 
+     * @param {string} meetingId - The meeting ID to simulate
+     */
+    startSimulation(meetingId) {
         if (this.active) return;
         this.active = true;
         let index = 0;
@@ -36,47 +46,67 @@ class SimulationService extends EventEmitter {
             }
 
             const text = this.script[index];
+            const now = new Date();
+            const speaker = index % 2 === 0 ? 'Alice' : 'Bob';
 
-            // 1. Emit transcript update
-            io.to(meetingId).emit('transcript_update', {
-                text: text,
-                timestamp: new Date(),
-                speaker: index % 2 === 0 ? 'Alice' : 'Bob'
-            });
+            try {
+                // Calculate minute window boundaries
+                const windowStart = new Date(now);
+                windowStart.setSeconds(0, 0);
+                const windowEnd = new Date(windowStart);
+                windowEnd.setMinutes(windowEnd.getMinutes() + 1);
 
-            // 2. Process for insights (Mock LLM)
-            const insights = await LLMService.processWindow(text);
-
-            // 3. Emit/Save Actions
-            if (insights.actions.length > 0) {
-                insights.actions.forEach(async (action) => {
-                    const newAction = new ActionItem({ ...action, meetingId });
-                    await newAction.save(); // In real app, might want to batch or await
-                    io.to(meetingId).emit('insight_generated', { type: 'action_item', data: newAction });
+                // 1. Write transcript to Firestore (Requirement 6.3)
+                // Frontend real-time listeners will receive updates automatically
+                const minuteWindow = await upsertMinuteWindow(meetingId, {
+                    startTime: windowStart,
+                    endTime: windowEnd,
+                    transcript: text,
+                    speaker: speaker,
+                    processed: false,
                 });
-            }
 
-            // 4. Emit/Save Decisions
-            if (insights.decisions.length > 0) {
-                insights.decisions.forEach(async (decision) => {
-                    const newDecision = new Decision({ ...decision, meetingId });
-                    await newDecision.save();
-                    io.to(meetingId).emit('insight_generated', { type: 'decision', data: newDecision });
-                });
-            }
+                // 2. Process for insights using mock LLM (Requirement 6.4, 6.6)
+                const insights = await LLMService.processWindow(text);
 
-            // 5. Visuals
-            if (insights.visualCandidates.length > 0) {
-                insights.visualCandidates.forEach(async (cand) => {
-                    const chartConfig = VisualEngine.generateChart(cand);
-                    const newVisual = new VisualArtifact({ ...chartConfig, meetingId });
-                    await newVisual.save();
-                    io.to(meetingId).emit('visual_created', newVisual);
+                // 3. Write actions and decisions to Firestore using batch write
+                if (insights.actions.length > 0 || insights.decisions.length > 0) {
+                    const actionsWithSource = insights.actions.map(action => ({
+                        ...action,
+                        sourceWindowId: minuteWindow.id,
+                    }));
+                    const decisionsWithSource = insights.decisions.map(decision => ({
+                        ...decision,
+                        sourceWindowId: minuteWindow.id,
+                    }));
+                    
+                    await batchCreateInsights(meetingId, actionsWithSource, decisionsWithSource);
+                }
+
+                // 4. Write visuals to Firestore
+                if (insights.visualCandidates.length > 0) {
+                    for (const candidate of insights.visualCandidates) {
+                        const chartConfig = VisualEngine.generateChart(candidate);
+                        await createVisual(meetingId, {
+                            ...chartConfig,
+                            sourceWindowId: minuteWindow.id,
+                        });
+                    }
+                }
+
+                // Mark minute window as processed
+                await upsertMinuteWindow(meetingId, {
+                    id: minuteWindow.id,
+                    processed: true,
                 });
+
+            } catch (error) {
+                console.error(`[SimulationService] Error processing script entry ${index}:`, error.message);
+                // Continue with next entry even if this one fails (Requirement 9.2)
             }
 
             index++;
-        }, 3000); // New sentence every 3 seconds
+        }, 3000); // New sentence every 3 seconds (Requirement 6.3)
     }
 
     stopSimulation() {
