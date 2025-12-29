@@ -1,4 +1,5 @@
-const { createMeeting, getMeetingById, getAllMeetings } = require('../repositories/meetingRepository');
+const { createMeeting, getMeetingById, getAllMeetings, deleteMeeting } = require('../repositories/meetingRepository');
+const { getMinutesByMeeting } = require('../repositories/minuteRepository');
 const { getArtifactsByMeeting } = require('../repositories/insightRepository');
 const { getVisualsByMeeting } = require('../repositories/visualRepository');
 const { transformMeeting, transformAction, transformDecision, transformVisual } = require('../utils/transformers');
@@ -88,15 +89,42 @@ exports.getMeetingArtifacts = async (req, res) => {
 };
 
 /**
+ * GET /api/meetings/:id/transcript
+ * 
+ * Returns full transcript for a meeting.
+ */
+exports.getMeetingTranscript = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const minutes = await getMinutesByMeeting(id);
+        console.log(`[Transcript] Fetched ${minutes.length} chunks for meeting ${id}`);
+
+        // Transform minute windows into transcript entries
+        const transcript = minutes.map(m => ({
+            id: m.id,
+            speaker: { name: m.speaker, id: 'unknown', initials: m.speaker?.[0] || '?', color: '#ccc' },
+            content: m.transcript,
+            timestamp: m.startTime.toDate ? m.startTime.toDate() : new Date(m.startTime._seconds * 1000),
+        }));
+
+        res.json(transcript);
+    } catch (err) {
+        console.error('[getMeetingTranscript]', err.message);
+        res.status(500).json({ error: 'Failed to retrieve transcript' });
+    }
+};
+
+/**
  * POST /api/meetings
  * 
  * Creates a new meeting.
  */
 exports.createMeeting = async (req, res) => {
     try {
-        const { title } = req.body;
+        const { title, participants } = req.body;
         const meeting = await createMeeting({
             title: title || 'New Meeting',
+            participants: participants || [],
             status: 'live',
             startTime: new Date(),
         });
@@ -104,5 +132,18 @@ exports.createMeeting = async (req, res) => {
     } catch (err) {
         console.error('[createMeeting]', err.message);
         res.status(500).json({ error: 'Failed to create meeting' });
+    }
+};
+
+/**
+ * DELETE /api/meetings/:id
+ */
+exports.deleteMeeting = async (req, res) => {
+    try {
+        await deleteMeeting(req.params.id);
+        res.status(200).json({ success: true, message: 'Meeting deleted' });
+    } catch (err) {
+        console.error('Error deleting meeting:', err);
+        res.status(500).json({ error: 'Failed to delete meeting' });
     }
 };

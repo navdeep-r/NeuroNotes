@@ -1,10 +1,10 @@
 const http = require('http');
 const app = require('./src/app');
-const { initializeFirebase } = require('./src/config/firebase');
+const connectDB = require('./src/config/db');
 const { PORT } = require('./src/config/env');
 
-// Initialize Firebase
-initializeFirebase();
+// Connect to Database (MongoDB)
+connectDB();
 
 const server = http.createServer(app);
 

@@ -27,6 +27,10 @@ function toDate(timestamp) {
  * @returns {Object} The document data
  */
 function extractData(doc) {
+  if (!doc) return {};
+  if (typeof doc.toObject === 'function') {
+    return doc.toObject();
+  }
   if (typeof doc.data === 'function') {
     return doc.data();
   }
@@ -49,10 +53,10 @@ function extractData(doc) {
  */
 function transformMeeting(doc) {
   if (!doc) return null;
-  
+
   const data = extractData(doc);
-  const id = doc.id || data.id;
-  
+  const id = (doc.id || doc._id || data.id || data._id || '').toString();
+
   return {
     id,
     title: data.title || 'Untitled Meeting',
@@ -79,10 +83,10 @@ function transformMeeting(doc) {
  */
 function transformAction(doc) {
   if (!doc) return null;
-  
+
   const data = extractData(doc);
-  const id = doc.id || data.id;
-  
+  const id = (doc.id || doc._id || data.id || data._id || '').toString();
+
   return {
     id,
     content: data.content || '',
@@ -119,10 +123,10 @@ function normalizeStatus(status) {
  */
 function transformDecision(doc) {
   if (!doc) return null;
-  
+
   const data = extractData(doc);
-  const id = doc.id || data.id;
-  
+  const id = (doc.id || doc._id || data.id || data._id || '').toString();
+
   return {
     id,
     content: data.content || '',
@@ -147,15 +151,15 @@ function transformDecision(doc) {
  */
 function transformVisual(doc) {
   if (!doc) return null;
-  
+
   const data = extractData(doc);
-  const id = doc.id || data.id;
-  
+  const id = (doc.id || doc._id || data.id || data._id || '').toString();
+
   // Convert Firestore data structure to frontend ChartData format
   const chartData = data.data || {};
   const labels = chartData.labels || [];
   const values = chartData.datasets?.[0]?.data || chartData.values || [];
-  
+
   return {
     id,
     title: data.title || '',

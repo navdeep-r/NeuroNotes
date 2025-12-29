@@ -1,29 +1,28 @@
 const mongoose = require('mongoose');
 
 const MeetingSchema = new mongoose.Schema({
-    title: {
-        type: String,
-        required: true,
-        default: 'Untitled Meeting'
-    },
-    status: {
-        type: String,
-        enum: ['live', 'completed', 'scheduled'],
-        default: 'live'
-    },
-    startTime: {
-        type: Date,
-        default: Date.now
-    },
-    endTime: {
-        type: Date
-    },
-    participants: [{
-        type: String // Names or IDs
-    }],
+    title: { type: String, default: 'Untitled Meeting' },
+    status: { type: String, enum: ['live', 'completed', 'scheduled'], default: 'scheduled' },
+    startTime: { type: Date, default: Date.now },
+    endTime: { type: Date },
+    participants: [String],
     summary: {
-        type: String
-    }
+        keyPoints: [String],
+        decisions: [{
+            content: String,
+            timestamp: Date,
+            participants: [String]
+        }],
+        actionItems: [{
+            content: String,
+            assignee: String,
+            dueDate: Date,
+            status: { type: String, enum: ['pending', 'in_progress', 'completed'], default: 'pending' },
+            createdAt: { type: Date, default: Date.now }
+        }]
+    },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Meeting', MeetingSchema);

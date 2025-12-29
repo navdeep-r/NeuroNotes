@@ -1,13 +1,14 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { 
-  LayoutDashboard, 
-  Radio, 
-  History, 
-  BarChart3, 
-  LineChart, 
+import {
+  LayoutDashboard,
+  Radio,
+  History,
+  BarChart3,
+  LineChart,
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  PlusCircle
 } from 'lucide-react'
 import { useAppState, useAppActions } from '../../context/AppContext'
 import MeetingList from '../MeetingList/MeetingList'
@@ -30,14 +31,15 @@ const navItems: NavItemData[] = [
 
 /**
  * Sidebar - Navigation and meeting list component
- * Implements Requirements 2.1-2.5 for navigation
- * Implements Requirements 3.1-3.5 for meeting list
+ * Implements Requests:
+ * - Start Analysis opens global modal
+ * - Meeting List supports delete
  */
 export default function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const { sidebarCollapsed, meetings, activeMeetingId } = useAppState()
-  const { setActiveMeeting, toggleSidebar, setActiveRoute } = useAppActions()
+  const { setActiveMeeting, toggleSidebar, setActiveRoute, toggleNewMeetingModal } = useAppActions()
 
   const handleNavClick = (route: string) => {
     setActiveRoute(route)
@@ -51,7 +53,7 @@ export default function Sidebar() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col relative">
       {/* Logo / Brand */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-white/5">
         {!sidebarCollapsed && (
@@ -80,15 +82,15 @@ export default function Sidebar() {
         {navItems.map((item) => {
           const Icon = item.icon
           const isActive = location.pathname === item.route
-          
+
           return (
             <button
               key={item.id}
               onClick={() => handleNavClick(item.route)}
               className={`
                 w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-smooth
-                ${isActive 
-                  ? 'bg-accent-primary/20 text-accent-primary' 
+                ${isActive
+                  ? 'bg-accent-primary/20 text-accent-primary'
                   : 'text-gray-400 hover:bg-white/5 hover:text-white'
                 }
               `}
@@ -109,6 +111,32 @@ export default function Sidebar() {
 
       {/* Divider */}
       <div className="mx-4 my-2 border-t border-white/5" />
+
+      {/* "Start Analysis" Button */}
+      {!sidebarCollapsed && (
+        <div className="px-4 py-2">
+          <button
+            onClick={() => toggleNewMeetingModal(true)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-accent-primary to-accent-secondary hover:brightness-110 text-white text-sm font-bold rounded-lg shadow-lg shadow-accent-primary/20 transition-all mb-2"
+          >
+            <PlusCircle className="w-4 h-4" />
+            Start Analysis
+          </button>
+        </div>
+      )}
+
+      {/* Sidebar Collapsed "Add" Icon */}
+      {sidebarCollapsed && (
+        <div className="px-2 py-2 flex justify-center">
+          <button
+            onClick={() => toggleNewMeetingModal(true)}
+            className="p-2 bg-accent-primary/20 text-accent-primary hover:bg-accent-primary hover:text-white rounded-lg transition-all"
+            title="Start New Analysis"
+          >
+            <PlusCircle className="w-5 h-5" />
+          </button>
+        </div>
+      )}
 
       {/* Meeting List */}
       {!sidebarCollapsed && (

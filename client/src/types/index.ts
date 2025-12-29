@@ -131,6 +131,7 @@ export interface AppState {
   commandInput: string
   commandBarFocused: boolean
   sidebarCollapsed: boolean
+  isNewMeetingModalOpen: boolean
 }
 
 export interface AppActions {
@@ -143,4 +144,7 @@ export interface AppActions {
   executeCommand: (command: string) => void
   updateElapsedTime: (time: number) => void
   toggleSidebar: () => void
+  setMeetings: (meetings: Meeting[]) => void
+  deleteMeeting: (meetingId: string) => void
+  toggleNewMeetingModal: (isOpen: boolean) => void
 }
