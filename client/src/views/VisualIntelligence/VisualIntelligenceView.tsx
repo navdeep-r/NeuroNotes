@@ -1,0 +1,159 @@
+import { mockVisualizations } from '../../data/mockData'
+import { Visualization } from '../../types'
+import { LineChart, BarChart3, Clock, PieChart } from 'lucide-react'
+
+interface VisualizationCardProps {
+  visualization: Visualization
+}
+
+function VisualizationCard({ visualization }: VisualizationCardProps) {
+  const getIcon = () => {
+    switch (visualization.type) {
+      case 'line': return LineChart
+      case 'bar': return BarChart3
+      case 'timeline': return Clock
+      case 'pie': return PieChart
+      default: return BarChart3
+    }
+  }
+
+  const Icon = getIcon()
+
+  // Simple chart representation
+  const renderChart = () => {
+    const maxValue = Math.max(...visualization.data.values)
+    
+    switch (visualization.type) {
+      case 'bar':
+        return (
+          <div className="flex items-end gap-2 h-32 mt-4">
+            {visualization.data.values.map((value, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div 
+                  className="w-full bg-gradient-to-t from-accent-primary to-accent-secondary rounded-t"
+                  style={{ height: `${(value / maxValue) * 100}%` }}
+                />
+                <span className="text-xs text-gray-500">{visualization.data.labels[i]}</span>
+              </div>
+            ))}
+          </div>
+        )
+      case 'line':
+        return (
+          <div className="h-32 mt-4 flex items-end">
+            <svg className="w-full h-full" viewBox="0 0 100 50" preserveAspectRatio="none">
+              <polyline
+                fill="none"
+                stroke="url(#lineGradient)"
+                strokeWidth="2"
+                points={visualization.data.values.map((v, i) => 
+                  `${(i / (visualization.data.values.length - 1)) * 100},${50 - (v / maxValue) * 45}`
+                ).join(' ')}
+              />
+              <defs>
+                <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#6366f1" />
+                  <stop offset="100%" stopColor="#8b5cf6" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+        )
+      case 'pie':
+        const total = visualization.data.values.reduce((a, b) => a + b, 0)
+        const colors = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b']
+        let currentAngle = 0
+        
+        return (
+          <div className="flex items-center gap-4 mt-4">
+            <svg className="w-24 h-24" viewBox="0 0 32 32">
+              {visualization.data.values.map((value, i) => {
+                const angle = (value / total) * 360
+                const startAngle = currentAngle
+                currentAngle += angle
+                
+                const x1 = 16 + 14 * Math.cos((startAngle - 90) * Math.PI / 180)
+                const y1 = 16 + 14 * Math.sin((startAngle - 90) * Math.PI / 180)
+                const x2 = 16 + 14 * Math.cos((startAngle + angle - 90) * Math.PI / 180)
+                const y2 = 16 + 14 * Math.sin((startAngle + angle - 90) * Math.PI / 180)
+                const largeArc = angle > 180 ? 1 : 0
+                
+                return (
+                  <path
+                    key={i}
+                    d={`M 16 16 L ${x1} ${y1} A 14 14 0 ${largeArc} 1 ${x2} ${y2} Z`}
+                    fill={colors[i % colors.length]}
+                  />
+                )
+              })}
+            </svg>
+            <div className="space-y-1">
+              {visualization.data.labels.map((label, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[i % colors.length] }} />
+                  <span className="text-gray-400">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      case 'timeline':
+        return (
+          <div className="mt-4 space-y-2">
+            {visualization.data.labels.map((label, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="text-xs text-gray-500 w-8">{label}</span>
+                <div className="flex-1 h-2 bg-dark-600 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-accent-primary to-accent-secondary rounded-full"
+                    style={{ width: `${(visualization.data.values[i] / maxValue) * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs text-gray-400 w-6">{visualization.data.values[i]}</span>
+              </div>
+            ))}
+          </div>
+        )
+      default:
+        return null
+    }
+  }
+
+  return (
+    <div className="glass-card p-5" data-testid={`viz-card-${visualization.id}`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="font-semibold text-white" data-testid="viz-title">{visualization.title}</h3>
+          <p className="text-sm text-gray-400 mt-1" data-testid="viz-description">{visualization.description}</p>
+        </div>
+        <div className="p-2 rounded-lg bg-accent-primary/10">
+          <Icon className="w-5 h-5 text-accent-primary" />
+        </div>
+      </div>
+      {renderChart()}
+    </div>
+  )
+}
+
+/**
+ * VisualIntelligenceView - Grid of AI-generated visualizations
+ * Implements Requirements 10.1-10.4 for visual intelligence
+ */
+export default function VisualIntelligenceView() {
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-white">Visual Intelligence</h1>
+        <p className="text-gray-400 mt-1">AI-generated insights from your meetings</p>
+      </div>
+
+      {/* Visualization Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {mockVisualizations.map((viz) => (
+          <VisualizationCard key={viz.id} visualization={viz} />
+        ))}
+      </div>
+    </div>
+  )
+}
