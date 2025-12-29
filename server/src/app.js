@@ -5,6 +5,7 @@ const morgan = require('morgan');
 
 const ingestRoutes = require('./routes/ingest.routes');
 const meetingRoutes = require('./routes/meeting.routes');
+const chatRoutes = require('./routes/chat.routes');
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use(express.json());
 // Routes
 app.use('/api/ingest', ingestRoutes);
 app.use('/api/meetings', meetingRoutes);
+app.use('/api/chat', chatRoutes);
 
 app.get('/', (req, res) => {
     res.send('Neuro_notes Backend Running');

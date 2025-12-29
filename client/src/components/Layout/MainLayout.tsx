@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import CommandBar from './CommandBar'
 import NewMeetingModal from '../Modals/NewMeetingModal'
+import AIResponseDisplay from './AIResponseDisplay'
 import { useAppState, useAppActions } from '../../context/AppContext'
 import { Meeting } from '../../types'
 
@@ -106,6 +107,9 @@ export default function MainLayout() {
       >
         <CommandBar />
       </footer>
+
+      {/* AI Assistant Overlay */}
+      <AIResponseDisplay />
     </div>
   )
 }

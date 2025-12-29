@@ -132,6 +132,8 @@ export interface AppState {
   commandBarFocused: boolean
   sidebarCollapsed: boolean
   isNewMeetingModalOpen: boolean
+  aiResponse: string | null
+  isProcessingCommand: boolean
 }
 
 export interface AppActions {
@@ -146,5 +148,7 @@ export interface AppActions {
   toggleSidebar: () => void
   setMeetings: (meetings: Meeting[]) => void
   deleteMeeting: (meetingId: string) => void
+  endMeeting: (meetingId: string) => Promise<void>
+  setAiResponse: (response: string | null) => void
   toggleNewMeetingModal: (isOpen: boolean) => void
 }

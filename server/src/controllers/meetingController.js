@@ -1,8 +1,9 @@
-const { createMeeting, getMeetingById, getAllMeetings, deleteMeeting } = require('../repositories/meetingRepository');
+const { createMeeting, getMeetingById, getAllMeetings, deleteMeeting, updateMeeting } = require('../repositories/meetingRepository');
 const { getMinutesByMeeting } = require('../repositories/minuteRepository');
 const { getArtifactsByMeeting } = require('../repositories/insightRepository');
 const { getVisualsByMeeting } = require('../repositories/visualRepository');
 const { transformMeeting, transformAction, transformDecision, transformVisual } = require('../utils/transformers');
+const SimulationService = require('../services/SimulationService');
 
 // Default query limit to prevent unbounded reads (Requirement 10.4)
 const DEFAULT_LIMIT = 50;
@@ -145,5 +146,27 @@ exports.deleteMeeting = async (req, res) => {
     } catch (err) {
         console.error('Error deleting meeting:', err);
         res.status(500).json({ error: 'Failed to delete meeting' });
+    }
+};
+/**
+ * POST /api/meetings/:id/end
+ */
+exports.endMeeting = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Update meeting status to completed
+        await updateMeeting(id, {
+            status: 'completed',
+            endTime: new Date()
+        });
+
+        // Stop simulation if it was running for this meeting
+        SimulationService.stopSimulation();
+
+        res.status(200).json({ success: true, message: 'Meeting ended' });
+    } catch (err) {
+        console.error('[endMeeting]', err.message);
+        res.status(500).json({ error: 'Failed to end meeting' });
     }
 };

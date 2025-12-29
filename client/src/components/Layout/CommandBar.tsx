@@ -26,22 +26,29 @@ export default function CommandBar() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!commandInput.trim()) return
 
-    // Parse and route commands
-    const cmd = commandInput.toLowerCase().trim()
-    
-    if (cmd.includes('chart') || cmd.includes('visual')) {
-      navigate('/visuals')
-    } else if (cmd.includes('insight') || cmd.includes('analytics')) {
-      navigate('/insights')
-    } else if (cmd.includes('history') || cmd.includes('past')) {
-      navigate('/history')
+    const cmd = commandInput.trim()
+
+    // Check for internal navigation keywords if not starting with /
+    if (!cmd.startsWith('/')) {
+      const lowerCmd = cmd.toLowerCase()
+      if (lowerCmd.includes('chart') || lowerCmd.includes('visual')) {
+        navigate('/visuals')
+        return
+      } else if (lowerCmd.includes('insight') || lowerCmd.includes('analytics')) {
+        navigate('/insights')
+        return
+      } else if (lowerCmd.includes('history') || lowerCmd.includes('past')) {
+        navigate('/history')
+        return
+      }
     }
 
-    executeCommand(commandInput)
+    // Direct AI command or free-form text
+    executeCommand(cmd)
   }
 
   return (
@@ -63,7 +70,7 @@ export default function CommandBar() {
             type="text"
             value={commandInput}
             onChange={(e) => setCommandInput(e.target.value)}
-            placeholder="Ask MinuteFlow to create a chart or assign an action…"
+            placeholder="Type /summary, /actions or ask a question…"
             className="w-full bg-dark-700/50 border border-white/10 rounded-xl px-4 py-3 
                        text-white placeholder-gray-500 focus:outline-none focus:border-accent-primary/50
                        focus:ring-2 focus:ring-accent-primary/20 transition-smooth"

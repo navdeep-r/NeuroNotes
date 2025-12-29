@@ -1,4 +1,4 @@
-import { useAppState } from '../../context/AppContext'
+import { useApp } from '../../context/AppContext'
 import LiveIndicator from '../LiveIndicator/LiveIndicator'
 import MeetingTimer from '../MeetingTimer/MeetingTimer'
 import SpeakerChip from '../SpeakerChip/SpeakerChip'
@@ -8,10 +8,19 @@ import SpeakerChip from '../SpeakerChip/SpeakerChip'
  * Implements Requirements 4.1-4.5 for live context display
  */
 export default function TopBar() {
-  const { meetings, activeMeetingId, isLive, elapsedTime, activeSpeakerId } = useAppState()
+  const [state, actions] = useApp()
+  const { meetings, activeMeetingId, isLive, elapsedTime, activeSpeakerId } = state
 
   const activeMeeting = meetings.find(m => m.id === activeMeetingId)
   const activeSpeaker = activeMeeting?.participants.find(p => p.id === activeSpeakerId)
+
+  const handleStopAnalysis = () => {
+    if (activeMeetingId) {
+      if (confirm('Are you sure you want to stop the meeting analysis? This will end the live session.')) {
+        actions.endMeeting(activeMeetingId)
+      }
+    }
+  }
 
   return (
     <div className="h-full flex items-center justify-between px-6">
@@ -30,10 +39,20 @@ export default function TopBar() {
         )}
       </div>
 
-      {/* Right section - Active speaker */}
+      {/* Right section - Active speaker & Controls */}
       <div className="flex items-center gap-4">
         {activeSpeaker && isLive && (
           <SpeakerChip speaker={activeSpeaker} isSpeaking={true} />
+        )}
+
+        {isLive && (
+          <button
+            onClick={handleStopAnalysis}
+            className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-medium rounded-full border border-red-500/20 transition-all flex items-center gap-2"
+          >
+            <div className="w-2 h-2 bg-red-500 rounded-sm" />
+            Stop Analysis
+          </button>
         )}
       </div>
     </div>
