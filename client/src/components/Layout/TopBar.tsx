@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import LiveIndicator from '../LiveIndicator/LiveIndicator'
 import MeetingTimer from '../MeetingTimer/MeetingTimer'
 import SpeakerChip from '../SpeakerChip/SpeakerChip'
+import ConfirmationModal from '../Modals/ConfirmationModal'
 
 /**
  * TopBar - Contextual header showing live meeting status
@@ -10,20 +12,35 @@ import SpeakerChip from '../SpeakerChip/SpeakerChip'
 export default function TopBar() {
   const [state, actions] = useApp()
   const { meetings, activeMeetingId, isLive, elapsedTime, activeSpeakerId } = state
+  const [isStopModalOpen, setIsStopModalOpen] = useState(false)
 
   const activeMeeting = meetings.find(m => m.id === activeMeetingId)
   const activeSpeaker = activeMeeting?.participants.find(p => p.id === activeSpeakerId)
 
   const handleStopAnalysis = () => {
     if (activeMeetingId) {
-      if (confirm('Are you sure you want to stop the meeting analysis? This will end the live session.')) {
-        actions.endMeeting(activeMeetingId)
-      }
+      setIsStopModalOpen(true)
+    }
+  }
+
+  const handleConfirmStop = () => {
+    if (activeMeetingId) {
+      actions.endMeeting(activeMeetingId)
     }
   }
 
   return (
     <div className="h-full flex items-center justify-between px-6">
+      <ConfirmationModal
+        isOpen={isStopModalOpen}
+        onClose={() => setIsStopModalOpen(false)}
+        onConfirm={handleConfirmStop}
+        title="Stop Analysis?"
+        message="Are you sure you want to stop the meeting analysis? This will end the live session and finalize the meeting minutes."
+        confirmText="Stop Analysis"
+        variant="danger"
+      />
+
       {/* Left section - Live indicator and timer */}
       <div className="flex items-center gap-4">
         {isLive && <LiveIndicator />}

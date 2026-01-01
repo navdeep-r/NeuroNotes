@@ -2,7 +2,7 @@ require('dotenv').config();
 const fs = require('fs');
 
 async function testGrok() {
-    console.log('--- Debugging Grok API ---');
+    console.log('--- Debugging Groq API ---');
     const apiKey = process.env.GROK_API_KEY ? process.env.GROK_API_KEY.trim() : null;
     if (!apiKey) {
         console.error('Missing GROK_API_KEY');
@@ -10,10 +10,10 @@ async function testGrok() {
     }
 
     console.log('API Key loaded:', apiKey ? `${apiKey.substring(0, 5)}...` : 'NO');
-    const url = 'https://api.x.ai/v1/chat/completions';
+    const url = 'https://api.groq.com/openai/v1/chat/completions';
 
     const variations = [
-        { model: "grok-beta", hasSystem: false }
+        { model: "llama-3.3-70b-versatile", hasSystem: false }
     ];
 
     for (const v of variations) {
