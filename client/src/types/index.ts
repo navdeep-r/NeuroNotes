@@ -116,6 +116,11 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  metadata?: {
+    window: string
+    speakers: string[]
+    confidence: number
+  }
 }
 
 // Navigation types

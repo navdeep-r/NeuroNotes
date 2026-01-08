@@ -3,6 +3,7 @@ import { Meeting } from '../../types'
 import MeetingItem from './MeetingItem'
 import { useAppActions } from '../../context/AppContext'
 import ConfirmationModal from '../Modals/ConfirmationModal'
+import VoiceSessionModal from '../Modals/VoiceSessionModal'
 
 interface MeetingListProps {
   meetings: Meeting[]
@@ -20,6 +21,17 @@ export default function MeetingList({ meetings, activeMeetingId, onSelect }: Mee
     isOpen: false,
     meetingId: null
   })
+
+  const [voiceModalState, setVoiceModalState] = useState<{ isOpen: boolean; meetingId: string | null; meetingTitle: string }>({
+    isOpen: false,
+    meetingId: null,
+    meetingTitle: ''
+  })
+
+  const handleVoice = (e: React.MouseEvent, meetingId: string, title: string) => {
+    e.stopPropagation()
+    setVoiceModalState({ isOpen: true, meetingId, meetingTitle: title })
+  }
 
   const handleDelete = (e: React.MouseEvent, meetingId: string) => {
     e.stopPropagation()
@@ -44,6 +56,12 @@ export default function MeetingList({ meetings, activeMeetingId, onSelect }: Mee
         confirmText="Delete Meeting"
         variant="danger"
       />
+      <VoiceSessionModal
+        isOpen={voiceModalState.isOpen}
+        onClose={() => setVoiceModalState({ ...voiceModalState, isOpen: false })}
+        meetingId={voiceModalState.meetingId || ''}
+        meetingTitle={voiceModalState.meetingTitle}
+      />
       {meetings.map((meeting) => (
         <MeetingItem
           key={meeting.id}
@@ -51,6 +69,7 @@ export default function MeetingList({ meetings, activeMeetingId, onSelect }: Mee
           isActive={meeting.id === activeMeetingId}
           onClick={() => onSelect(meeting.id)}
           onDelete={(e) => handleDelete(e, meeting.id)}
+          onVoiceMode={(e) => handleVoice(e, meeting.id, meeting.title)}
         />
       ))}
     </div>

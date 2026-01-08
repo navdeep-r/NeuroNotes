@@ -1,19 +1,20 @@
 import { useState } from 'react'
 import { Search, Calendar, Clock, Users } from 'lucide-react'
-import { mockMeetings } from '../../data/mockData'
 import { Meeting } from '../../types'
+import { useAppState } from '../../context/AppContext'
 
 /**
  * MeetingsHistoryView - Browse and search past meetings
  * Implements Requirements 9.1-9.4 for meeting history
  */
 export default function MeetingsHistoryView() {
+  const { meetings } = useAppState()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null)
 
-  // Filter completed meetings
-  const completedMeetings = mockMeetings.filter(m => m.status === 'completed')
-  
+  // Filter completed meetings from real state
+  const completedMeetings = meetings.filter(m => m.status === 'completed')
+
   // Apply search filter
   const filteredMeetings = completedMeetings.filter(m =>
     m.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -63,14 +64,13 @@ export default function MeetingsHistoryView() {
               <button
                 key={meeting.id}
                 onClick={() => setSelectedMeeting(meeting)}
-                className={`w-full text-left p-4 rounded-lg transition-smooth ${
-                  selectedMeeting?.id === meeting.id
-                    ? 'bg-accent-primary/20 border border-accent-primary/30'
-                    : 'bg-dark-700/30 hover:bg-dark-700/50 border border-transparent'
-                }`}
+                className={`w-full text-left p-4 rounded-lg transition-smooth ${selectedMeeting?.id === meeting.id
+                  ? 'bg-accent-primary/20 border border-accent-primary/30'
+                  : 'bg-dark-700/30 hover:bg-dark-700/50 border border-transparent'
+                  }`}
                 data-testid={`history-item-${meeting.id}`}
               >
-                <h3 
+                <h3
                   className="font-medium text-white"
                   data-testid="history-meeting-name"
                 >
@@ -140,11 +140,10 @@ export default function MeetingsHistoryView() {
                     {selectedMeeting.summary.actionItems.map((action) => (
                       <li key={action.id} className="flex items-center justify-between text-sm">
                         <span className="text-gray-300">{action.content}</span>
-                        <span className={`px-2 py-0.5 rounded text-xs ${
-                          action.status === 'completed' ? 'bg-accent-success/20 text-accent-success' :
+                        <span className={`px-2 py-0.5 rounded text-xs ${action.status === 'completed' ? 'bg-accent-success/20 text-accent-success' :
                           action.status === 'in_progress' ? 'bg-accent-warning/20 text-accent-warning' :
-                          'bg-gray-500/20 text-gray-400'
-                        }`}>
+                            'bg-gray-500/20 text-gray-400'
+                          }`}>
                           {action.status.replace('_', ' ')}
                         </span>
                       </li>

@@ -1,19 +1,20 @@
 import { Meeting } from '../../types'
 
-import { Trash2 } from 'lucide-react'
+import { Trash2, Mic } from 'lucide-react'
 
 interface MeetingItemProps {
   meeting: Meeting
   isActive: boolean
   onClick: () => void
   onDelete: (e: React.MouseEvent) => void
+  onVoiceMode: (e: React.MouseEvent) => void
 }
 
 /**
  * MeetingItem - Individual meeting item in the sidebar list
  * Implements Requirements 3.1-3.3 for meeting item display
  */
-export default function MeetingItem({ meeting, isActive, onClick, onDelete }: MeetingItemProps) {
+export default function MeetingItem({ meeting, isActive, onClick, onDelete, onVoiceMode }: MeetingItemProps) {
   return (
     <div
       onClick={onClick}
@@ -49,14 +50,25 @@ export default function MeetingItem({ meeting, isActive, onClick, onDelete }: Me
         </span>
       </div>
 
-      {/* Delete Button (visible on hover) */}
-      <button
-        onClick={onDelete}
-        className={`p-1.5 rounded-md hover:bg-red-500/20 hover:text-red-500 text-gray-500 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 ${isActive ? 'text-white/50 hover:text-white' : ''}`}
-        title="Delete meeting"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
+      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Voice Mode Button */}
+        <button
+          onClick={onVoiceMode}
+          className={`p-1.5 rounded-md hover:bg-accent-primary/20 hover:text-accent-primary text-gray-500 transition-colors mr-1 ${isActive ? 'text-white/50 hover:text-white' : ''}`}
+          title="Start Voice Session"
+        >
+          <Mic className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Delete Button */}
+        <button
+          onClick={onDelete}
+          className={`p-1.5 rounded-md hover:bg-red-500/20 hover:text-red-500 text-gray-500 transition-colors ${isActive ? 'text-white/50 hover:text-white' : ''}`}
+          title="Delete meeting"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   )
 }

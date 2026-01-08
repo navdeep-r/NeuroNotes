@@ -178,7 +178,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
           content: data.response,
-          timestamp: new Date()
+          timestamp: new Date(),
+          metadata: data.metadata // Provenance data from backend
         };
         dispatch({ type: 'ADD_CHAT_MESSAGE', payload: aiMessage });
         dispatch({ type: 'SET_AI_RESPONSE', payload: null });

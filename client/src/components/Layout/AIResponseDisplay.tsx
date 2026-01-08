@@ -102,6 +102,34 @@ export default function AIResponseDisplay() {
                                         </div>
                                     </div>
 
+                                    {/* Metadata / Provenance Badge */}
+                                    {msg.metadata && (
+                                        <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+                                            <div className="flex items-center gap-2 text-[10px] text-gray-400 font-medium uppercase tracking-wider">
+                                                <Sparkles className="w-3 h-3 text-accent-secondary" />
+                                                <span>AI Provenance</span>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="bg-white/5 rounded p-2 border border-white/5">
+                                                    <span className="block text-[9px] text-gray-500 uppercase">Context Window</span>
+                                                    <span className="text-xs text-gray-300 font-mono">{msg.metadata.window}</span>
+                                                </div>
+                                                <div className="bg-white/5 rounded p-2 border border-white/5">
+                                                    <span className="block text-[9px] text-gray-500 uppercase">Confidence</span>
+                                                    <span className="text-xs text-accent-success font-mono">{(msg.metadata.confidence * 100).toFixed(0)}%</span>
+                                                </div>
+                                                {msg.metadata.speakers.length > 0 && (
+                                                    <div className="col-span-2 bg-white/5 rounded p-2 border border-white/5">
+                                                        <span className="block text-[9px] text-gray-500 uppercase">Sources</span>
+                                                        <span className="text-xs text-gray-300 truncate block">
+                                                            {msg.metadata.speakers.join(', ')}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Copy Button (Only for AI) */}
                                     {msg.role === 'assistant' && (
                                         <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/5">
