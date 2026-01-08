@@ -1,7 +1,6 @@
 class VisualEngine {
     generateChart(candidate) {
         const { context, text } = candidate;
-
         // Simple rule engine
         if (context === 'financial_growth') {
             return {

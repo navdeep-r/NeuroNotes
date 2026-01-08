@@ -22,7 +22,25 @@ export default function VoiceVisualizer({ mode, audioStream, audioElement }: Voi
             analyserRef.current.smoothingTimeConstant = 0.8
         }
 
+        const resumeContext = () => {
+            const ctx = contextRef.current
+            if (ctx && ctx.state === 'suspended') {
+                ctx.resume().catch((err) => console.warn('AudioContext resume failed', err))
+            }
+        }
+
+        resumeContext()
+
+        // Resume context on first user gesture so routed audio is audible.
+        window.addEventListener('pointerdown', resumeContext)
+        window.addEventListener('touchstart', resumeContext)
+        window.addEventListener('keydown', resumeContext)
+
         return () => {
+            window.removeEventListener('pointerdown', resumeContext)
+            window.removeEventListener('touchstart', resumeContext)
+            window.removeEventListener('keydown', resumeContext)
+
             if (contextRef.current?.state !== 'closed') {
                 contextRef.current?.close()
             }
