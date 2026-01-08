@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, ReactNode } from 'react'
-import { AppState, AppActions, TranscriptEntry, Meeting } from '../types'
+import { AppState, AppActions, TranscriptEntry, Meeting, ChatMessage } from '../types'
 import { mockMeetings } from '../data/mockData'
 
 // Initial state
@@ -16,6 +16,7 @@ const initialState: AppState = {
   sidebarCollapsed: false,
   isNewMeetingModalOpen: false,
   aiResponse: null,
+  chatHistory: [],
   isProcessingCommand: false,
 }
 
@@ -36,6 +37,7 @@ type Action =
   | { type: 'UPDATE_MEETING'; payload: Partial<Meeting> & { id: string } }
   | { type: 'TOGGLE_NEW_MEETING_MODAL'; payload: boolean }
   | { type: 'SET_AI_RESPONSE'; payload: string | null }
+  | { type: 'ADD_CHAT_MESSAGE'; payload: ChatMessage }
   | { type: 'SET_PROCESSING_COMMAND'; payload: boolean }
 
 // Reducer
@@ -108,6 +110,8 @@ function appReducer(state: AppState, action: Action): AppState {
       return { ...state, isNewMeetingModalOpen: action.payload }
     case 'SET_AI_RESPONSE':
       return { ...state, aiResponse: action.payload }
+    case 'ADD_CHAT_MESSAGE':
+      return { ...state, chatHistory: [...state.chatHistory, action.payload] }
     case 'SET_PROCESSING_COMMAND':
       return { ...state, isProcessingCommand: action.payload }
     default:
@@ -154,6 +158,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'SET_COMMAND_INPUT', payload: '' });
       dispatch({ type: 'SET_AI_RESPONSE', payload: 'Analyzing...' });
 
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: command,
+        timestamp: new Date()
+      };
+      dispatch({ type: 'ADD_CHAT_MESSAGE', payload: userMessage });
+
       try {
         const response = await fetch('http://localhost:5000/api/chat/query', {
           method: 'POST',
@@ -162,7 +174,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
 
         const data = await response.json();
-        dispatch({ type: 'SET_AI_RESPONSE', payload: data.response });
+        const aiMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.response,
+          timestamp: new Date()
+        };
+        dispatch({ type: 'ADD_CHAT_MESSAGE', payload: aiMessage });
+        dispatch({ type: 'SET_AI_RESPONSE', payload: null });
       } catch (err) {
         console.error('Failed to execute command:', err);
         dispatch({ type: 'SET_AI_RESPONSE', payload: 'Error: Failed to connect to AI service.' });
@@ -194,6 +213,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, []),
     setAiResponse: useCallback((response: string | null) => {
       dispatch({ type: 'SET_AI_RESPONSE', payload: response })
+    }, []),
+    addChatMessage: useCallback((message: ChatMessage) => {
+      dispatch({ type: 'ADD_CHAT_MESSAGE', payload: message })
     }, []),
     toggleNewMeetingModal: useCallback((isOpen: boolean) => {
       dispatch({ type: 'TOGGLE_NEW_MEETING_MODAL', payload: isOpen })

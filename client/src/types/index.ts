@@ -111,6 +111,13 @@ export interface Recommendation {
   impact: 'high' | 'medium' | 'low'
 }
 
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
+}
+
 // Navigation types
 export interface NavItem {
   id: string
@@ -133,6 +140,7 @@ export interface AppState {
   sidebarCollapsed: boolean
   isNewMeetingModalOpen: boolean
   aiResponse: string | null
+  chatHistory: ChatMessage[]
   isProcessingCommand: boolean
 }
 
@@ -150,5 +158,6 @@ export interface AppActions {
   deleteMeeting: (meetingId: string) => void
   endMeeting: (meetingId: string) => Promise<void>
   setAiResponse: (response: string | null) => void
+  addChatMessage: (message: ChatMessage) => void
   toggleNewMeetingModal: (isOpen: boolean) => void
 }
