@@ -4,6 +4,7 @@ const { getArtifactsByMeeting } = require('../repositories/insightRepository');
 const { getVisualsByMeeting } = require('../repositories/visualRepository');
 const { transformMeeting, transformAction, transformDecision, transformVisual } = require('../utils/transformers');
 const SimulationService = require('../services/SimulationService');
+const LLMService = require('../services/LLMService');
 
 // Default query limit to prevent unbounded reads (Requirement 10.4)
 const DEFAULT_LIMIT = 50;
@@ -101,12 +102,23 @@ exports.getMeetingTranscript = async (req, res) => {
         console.log(`[Transcript] Fetched ${minutes.length} chunks for meeting ${id}`);
 
         // Transform minute windows into transcript entries
-        const transcript = minutes.map(m => ({
-            id: m.id,
-            speaker: { name: m.speaker, id: 'unknown', initials: m.speaker?.[0] || '?', color: '#ccc' },
-            content: m.transcript,
-            timestamp: m.startTime.toDate ? m.startTime.toDate() : new Date(m.startTime._seconds * 1000),
-        }));
+        const transcript = minutes.flatMap(m => {
+            if (m.segments && m.segments.length > 0) {
+                return m.segments.map((seg, idx) => ({
+                    id: seg._id || `${m._id}_${idx}`,
+                    speaker: { name: seg.speaker, id: 'unknown', initials: seg.speaker?.[0] || '?', color: '#ccc' },
+                    content: seg.text,
+                    timestamp: seg.timestamp ? (seg.timestamp.toDate ? seg.timestamp.toDate() : new Date(seg.timestamp)) : new Date(),
+                }));
+            }
+            // Fallback for legacy data
+            return [{
+                id: m.id,
+                speaker: { name: m.speaker, id: 'unknown', initials: m.speaker?.[0] || '?', color: '#ccc' },
+                content: m.transcript,
+                timestamp: m.startTime.toDate ? m.startTime.toDate() : new Date(m.startTime._seconds * 1000),
+            }];
+        });
 
         res.json(transcript);
     } catch (err) {
@@ -168,5 +180,78 @@ exports.endMeeting = async (req, res) => {
     } catch (err) {
         console.error('[endMeeting]', err.message);
         res.status(500).json({ error: 'Failed to end meeting' });
+    }
+};
+
+/**
+ * POST /api/meetings/:id/generate-summary
+ * 
+ * Generates a full summary for the meeting using LLM.
+ */
+exports.generateMeetingSummary = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // 1. Fetch transcript
+        const minutes = await getMinutesByMeeting(id);
+        console.log(`[GenerateSummary] Fetched ${minutes.length} minutes for meeting ${id}`);
+
+        const fullTranscript = minutes.flatMap(m => {
+            // Debug log for first few minutes
+            if (minutes.length < 5 || m.minuteIndex < 2) {
+                console.log(`[GenerateSummary] Minute ${m.minuteIndex}: segments=${m.segments?.length}, legacy=${!!m.transcript}`);
+            }
+
+            if (m.segments && m.segments.length > 0) {
+                return m.segments.map(s => `[${s.speaker}]: ${s.text}`);
+            }
+            // Handle case where legacy transcript might be undefined
+            const legacyText = m.transcript || '';
+            if (!legacyText) return [];
+            return [`[${m.speaker || 'Unknown'}]: ${legacyText}`];
+        }).join('\n');
+
+        console.log(`[GenerateSummary] Full transcript length: ${fullTranscript.length}`);
+
+        if (!fullTranscript || fullTranscript.length < 10) {
+            console.warn('[GenerateSummary] Transcript too short or empty');
+            return res.status(400).json({ error: 'No transcript available to summarize' });
+        }
+
+        // 2. Generate Summary via LLM
+        const summaryData = await LLMService.generateSummary(fullTranscript);
+
+        // 3. Update Meeting with Summary (Key Points)
+        // We'll store keyPoints in the meeting doc for quick access, 
+        // and actions/decisions in their own collections via repositories if we want to be strict,
+        // but for now let's save keyPoints to meeting doc.
+
+        await updateMeeting(id, {
+            summary: {
+                keyPoints: summaryData.keyPoints || [],
+                decisions: summaryData.decisions || [],
+                actionItems: summaryData.actionItems || [],
+                // Enhanced fields
+                opportunities: summaryData.opportunities || [],
+                risks: summaryData.risks || [],
+                eligibility: summaryData.eligibility || [],
+                questions: summaryData.questions || []
+            }
+        });
+
+        // 4. Return the fresh summary
+        res.json({
+            keyPoints: summaryData.keyPoints,
+            decisions: summaryData.decisions,
+            actionItems: summaryData.actionItems,
+            opportunities: summaryData.opportunities,
+            risks: summaryData.risks,
+            eligibility: summaryData.eligibility,
+            questions: summaryData.questions
+        });
+
+    } catch (err) {
+        console.error('[generateMeetingSummary]', err.message);
+        res.status(500).json({ error: 'Failed to generate summary' });
     }
 };

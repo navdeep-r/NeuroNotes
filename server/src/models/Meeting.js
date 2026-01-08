@@ -8,6 +8,12 @@ const MeetingSchema = new mongoose.Schema({
     participants: [String],
     summary: {
         keyPoints: [String],
+        // Enhanced Summary Fields
+        opportunities: [String],
+        risks: [String],
+        eligibility: [String],
+        questions: [String],
+
         decisions: [{
             content: String,
             timestamp: Date,

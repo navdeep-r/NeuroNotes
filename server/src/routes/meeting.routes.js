@@ -7,6 +7,7 @@ router.post('/', meetingController.createMeeting);
 router.get('/:id', meetingController.getMeetingDetails);
 router.get('/:id/transcript', meetingController.getMeetingTranscript);
 router.get('/:id/artifacts', meetingController.getMeetingArtifacts);
+router.post('/:id/generate-summary', meetingController.generateMeetingSummary);
 router.post('/:id/end', meetingController.endMeeting);
 router.delete('/:id', meetingController.deleteMeeting);
 

@@ -58,9 +58,19 @@ class SimulationService extends EventEmitter {
 
                 // 1. Write transcript to Firestore (Requirement 6.3)
                 // Frontend real-time listeners will receive updates automatically
+                // UPDATED: Send as segment to prevent overwrite of previous sentences in this minute
                 const minuteWindow = await upsertMinuteWindow(meetingId, {
                     startTime: windowStart,
                     endTime: windowEnd,
+
+                    // New segment structure
+                    segment: {
+                        speaker: speaker,
+                        text: text,
+                        timestamp: now
+                    },
+
+                    // Legacy field (will only contain latest sentence, but kept for schema compliance if needed)
                     transcript: text,
                     speaker: speaker,
                     processed: false,
@@ -79,7 +89,7 @@ class SimulationService extends EventEmitter {
                         ...decision,
                         sourceWindowId: minuteWindow.id,
                     }));
-                    
+
                     await batchCreateInsights(meetingId, actionsWithSource, decisionsWithSource);
                 }
 

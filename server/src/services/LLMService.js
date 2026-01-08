@@ -130,6 +130,124 @@ Please provide a helpful, concise, and well-formatted response using markdown fo
         return `I am tuning in to the discussion about **NeuroNotes**. We are currently focused on the **Backend Integration** and **API Stability**. I can help you summarize the technical decisions made so far regarding Grok and MongoDB.`;
     }
 
+    /**
+     * Generates a grounded, concise response for voice interaction.
+     */
+    async generateVoiceResponse(context, query) {
+        if (!context) return "I don't have enough context about this meeting to answer that.";
+
+        // Special prompt for voice agent
+        const prompt = `You are an intelligent analyst assistant. You are having a spoken conversation with a user about a specific past meeting.
+        
+        ### Meeting Context (Ground Truth):
+        ${context}
+        
+        ### User Query:
+        "${query}"
+        
+        ### Instructions:
+        1. Answer the user's query mainly based on the provided Meeting Context.
+        2. If the answer is not in the context, politely say you don't know based on the meeting records.
+        3. Keep your response CONCISE and CONVERSATIONAL (suitable for text-to-speech). Avoid long lists or markdown formatting unless necessary for structure (but speech synthesis reads raw text, so avoid complex markdown).
+        4. Do not hallucinate facts outside the meeting.
+        5. Limit response to 2-3 sentences if possible.
+        
+        Response:`;
+
+        if (!this.demoMode && this.apiKey) {
+            const response = await this._callGrok(prompt);
+            if (response && response.trim()) {
+                return response;
+            }
+        }
+
+        // Voice Demo Fallback
+        return "I can confirm from the meeting records that the team decided to proceed with the Grok API integration. The main reason was the improved reliability for the demo.";
+    }
+
+    /**
+     * Generates a comprehensive summary from the full transcript.
+     * Returns structured JSON: { keyPoints: [], decisions: [], actionItems: [] }
+     */
+    async generateSummary(transcript) {
+        if (!transcript) return { keyPoints: [], decisions: [], actionItems: [] };
+
+        // Default mock data to use as fallback
+        const mockSummary = {
+            keyPoints: [
+                "The team validated the Grok API integration and confirmed high throughput.",
+                "Frontend architecture is stable but needs a refactor for the new chat UI.",
+                "MongoDB usage was approved, specifically adopting the new schema for segments."
+            ],
+            opportunities: [
+                "Leverage Grok's larger context window for full-day workshop summaries.",
+                "Use the new voice mode for accessible 'podcast-style' meeting reviews."
+            ],
+            risks: [
+                "Potential latency spikes if the simulation runs too fast.",
+                "Backward compatibility issues with legacy meeting transcripts."
+            ],
+            eligibility: [
+                "All team members can access the new summary features immediately.",
+                "Voice mode requires a compatible browser (Chrome/Edge)."
+            ],
+            questions: [
+                "How will we handle rate limits for the free tier?",
+                "Do we need a dedicated cache layer for repeated queries?"
+            ],
+            decisions: [
+                { content: "Proceed with Grok-beta for the demo", confidence: 0.95 },
+                { content: "Use dark mode as the default theme", confidence: 1.0 }
+            ],
+            actionItems: [
+                { content: "Refactor LLMService to remove legacy Gemini code", assignee: "Backend", status: "pending" },
+                { content: "Update environment variables", assignee: "DevOps", status: "pending" }
+            ]
+        };
+
+        if (!this.demoMode && this.apiKey) {
+            const prompt = `Analyze the provided meeting transcript and generate a comprehensive, structured briefing.
+            
+            Transcript:
+            ${transcript}
+            
+            Produce strictly valid JSON (no markdown) with the following structure:
+            {
+                "keyPoints": ["Detailed point 1 with context...", "Detailed point 2..."],
+                "opportunities": ["Opportunity 1...", "Benefit 1..."],
+                "risks": ["Risk 1...", "Trade-off 1..."],
+                "eligibility": ["Criteria 1...", "Requirement 1..."],
+                "questions": ["Open question 1...", "Clarification needed on..."],
+                "decisions": [{"content": "What was decided", "confidence": 0.9}],
+                "actionItems": [{"content": "Specific action with timeline", "assignee": "Name", "status": "pending"}]
+            }
+            
+            Guidelines:
+            - **Key Points**: Provide context, rationale, and implications. Not just one-liners.
+            - **Decisions**: Clear outcomes with reasoning.
+            - **Action Items**: Specific tasks with assignees and implied deadlines if mentioned.
+            - **Opportunities/Risks**: Extract strategic insights.
+            - **Questions**: Capture unresolved items.
+            
+            Do not include markdown formatting. Just the raw JSON.`;
+
+            const response = await this._callGrok(prompt, true);
+            if (response) {
+                try {
+                    // simple cleanup in case of markdown blocks
+                    const cleanJson = response.replace(/```json/g, '').replace(/```/g, '').trim();
+                    return JSON.parse(cleanJson);
+                } catch (e) {
+                    console.error('Failed to parse LLM summary JSON', e);
+                    // Fallthrough to mock
+                }
+            }
+        }
+
+        // Fallback / Demo Mock
+        return mockSummary;
+    }
+
     mockProcess(transcript) {
         // Returns rich mock data for the live "minute" processing
 

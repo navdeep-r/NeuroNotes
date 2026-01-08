@@ -44,6 +44,10 @@ export interface MeetingSummary {
   keyPoints: string[]
   decisions: Decision[]
   actionItems: ActionItem[]
+  opportunities?: string[]
+  risks?: string[]
+  eligibility?: string[]
+  questions?: string[]
 }
 
 export interface Meeting {

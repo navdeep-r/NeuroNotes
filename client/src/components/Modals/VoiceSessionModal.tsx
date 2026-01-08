@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Mic, MicOff, Volume2, Loader2, Sparkles } from 'lucide-react'
+import { X, Mic, MicOff, Volume2, Sparkles, AlertCircle } from 'lucide-react'
+import VoiceVisualizer from '../Voice/VoiceVisualizer'
 
 interface VoiceSessionModalProps {
     isOpen: boolean
@@ -9,114 +10,143 @@ interface VoiceSessionModalProps {
     meetingTitle: string
 }
 
-type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking'
-
 export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingTitle }: VoiceSessionModalProps) {
     const [mounted, setMounted] = useState(false)
-    const [state, setState] = useState<VoiceState>('idle')
-    const [transcript, setTranscript] = useState('')
-    const [aiResponse, setAiResponse] = useState('')
+    const [state, setState] = useState<'idle' | 'listening' | 'processing' | 'speaking'>('idle')
+    const [aiResponse, setAiResponse] = useState<string>('')
     const [error, setError] = useState<string | null>(null)
 
+    // Audio Refs
     const recognitionRef = useRef<any>(null)
-    const synthesisRef = useRef<SpeechSynthesis | null>(null)
+    const mediaStreamRef = useRef<MediaStream | null>(null)
+    const audioRef = useRef<HTMLAudioElement | null>(null)
+    const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-    // Handle client-side mounting for Portal
     useEffect(() => {
         setMounted(true)
         return () => setMounted(false)
     }, [])
 
-    // Initialize Speech APIs
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            // Speech Recognition
+        if (isOpen) {
+            startListening()
+        } else {
+            stopListening()
+            stopAudioPlayback()
+        }
+        return () => {
+            stopListening()
+            stopAudioPlayback()
+        }
+    }, [isOpen])
+
+    const startListening = async () => {
+        setError(null)
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            mediaStreamRef.current = stream
+
+            // 2. Start Speech Recognition
             const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-            if (SpeechRecognition) {
-                recognitionRef.current = new SpeechRecognition()
-                recognitionRef.current.continuous = false
-                recognitionRef.current.interimResults = false
-                recognitionRef.current.lang = 'en-US'
+            if (!SpeechRecognition) {
+                setError('Browser does not support Voice Recognition.')
+                return
+            }
 
-                recognitionRef.current.onstart = () => setState('listening')
-                recognitionRef.current.onend = () => {
-                    // Only switch to idle if we haven't moved to processing (i.e. if user stopped talking but no result yet, or manual stop)
-                    // But usually onresult fires before onend.
-                }
+            const recognition = new SpeechRecognition()
+            recognition.continuous = false
+            recognition.interimResults = false
+            recognition.lang = 'en-US'
 
-                recognitionRef.current.onresult = (event: any) => {
-                    const text = event.results[0][0].transcript
-                    setTranscript(text)
-                    if (text.trim()) {
-                        processQuery(text)
-                    }
-                }
+            recognition.onstart = () => {
+                setState('listening')
+            }
 
-                recognitionRef.current.onerror = (event: any) => {
-                    console.error('Speech recognition error', event.error)
-                    setError('Could not hear you. Please try again.')
+            recognition.onresult = (event: any) => {
+                const transcript = event.results[0][0].transcript
+                setState('processing')
+                processQuery(transcript)
+            }
+
+            recognition.onerror = (event: any) => {
+                console.error('Speech error', event.error)
+                if (event.error === 'no-speech') {
+                    setState('idle')
+                } else if (event.error === 'network') {
+                    setError('Network error (Speech API unreachable). Please check connection.')
+                    setState('idle')
+                } else if (event.error === 'not-allowed') {
+                    setError('Microphone permission denied.')
+                    setState('idle')
+                } else {
+                    setError(`Voice error: ${event.error}`)
                     setState('idle')
                 }
             }
 
-            // Speech Synthesis
-            synthesisRef.current = window.speechSynthesis
-        }
-
-        return () => {
-            if (recognitionRef.current) recognitionRef.current.abort()
-            if (synthesisRef.current) synthesisRef.current.cancel()
-        }
-    }, [])
-
-    // Auto-start listening when modal opens
-    useEffect(() => {
-        if (isOpen) {
-            setError(null)
-            setTranscript('')
-            setAiResponse('')
-            startListening()
-        } else {
-            stopListening()
-            if (synthesisRef.current) synthesisRef.current.cancel()
-        }
-    }, [isOpen])
-
-    const startListening = () => {
-        if (recognitionRef.current) {
-            try {
-                recognitionRef.current.start()
-                setState('listening')
-                setError(null)
-            } catch (e) {
-                // Already started
+            recognition.onend = () => {
+                if (state === 'listening') {
+                    setState('idle')
+                }
             }
-        } else {
-            setError('Speech recognition not supported in this browser.')
+
+            recognitionRef.current = recognition
+
+            // Small delay to allow mic stream to settle + prevent race conditions
+            setTimeout(() => {
+                try {
+                    if (recognitionRef.current) recognition.start()
+                } catch (e) {
+                    console.error("Failed to start recognition", e)
+                }
+            }, 100)
+
+        } catch (err) {
+            console.error('Failed to access microphone', err)
+            setError('Microphone access denied or not available.')
         }
     }
 
     const stopListening = () => {
         if (recognitionRef.current) {
             recognitionRef.current.stop()
+            recognitionRef.current = null
+        }
+
+        if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach(track => track.stop())
+            mediaStreamRef.current = null
+        }
+
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+    }
+
+    const stopAudioPlayback = () => {
+        if (audioRef.current) {
+            audioRef.current.pause()
+            audioRef.current = null
         }
     }
 
     const processQuery = async (text: string) => {
         setState('processing')
         try {
-            const res = await fetch('http://localhost:5000/api/chat/query', {
+            const res = await fetch('http://localhost:5000/api/voice/interact', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ meetingId, query: text })
             })
+
+            if (!res.ok) throw new Error('API Error')
+
             const data = await res.json()
 
-            if (data.response) {
-                setAiResponse(data.response)
-                speakResponse(data.response)
+            if (data.text && data.audio) {
+                console.log('[VoiceSession] Received Audio Response. Length:', data.audio.length)
+                setAiResponse(data.text)
+                playAudioResponse(data.audio)
             } else {
-                throw new Error('No response from AI')
+                throw new Error('Invalid response format')
             }
         } catch (err) {
             console.error(err)
@@ -125,137 +155,149 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
         }
     }
 
-    const speakResponse = (text: string) => {
-        if (!synthesisRef.current) return
+    const playAudioResponse = (base64Audio: string) => {
+        try {
+            if (audioRef.current) audioRef.current.pause();
 
-        // Strip markdown symbols for cleaner speech
-        const cleanText = text.replace(/[*#_`]/g, '')
+            console.log('[VoiceSession] Creating Audio object...')
+            const audio = new Audio(`data:audio/mpeg;base64,${base64Audio}`)
+            audioRef.current = audio;
 
-        const utterance = new SpeechSynthesisUtterance(cleanText)
-        utterance.onstart = () => setState('speaking')
-        utterance.onend = () => {
+            audio.onloadedmetadata = () => {
+                console.log('[VoiceSession] Audio metadata loaded. Duration:', audio.duration)
+            }
+
+            audio.onplay = () => {
+                console.log('[VoiceSession] Audio started playing')
+                setState('speaking')
+            }
+
+            audio.onended = () => {
+                console.log('[VoiceSession] Audio ended')
+                setState('idle')
+            }
+
+            audio.onerror = (e) => {
+                console.error('[VoiceSession] Audio playback error', (e.target as HTMLAudioElement).error)
+                setError('Failed to play audio response')
+                setState('idle')
+            }
+
+            const playPromise = audio.play()
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.error('[VoiceSession] Playback prevented:', error)
+                });
+            }
+        } catch (e) {
+            console.error('Audio reconstruction error', e)
             setState('idle')
-            // Optional: Auto-listen again after a delay? 
-            // For now, let's keep it manual or user-guided to avoid loops.
         }
-
-        // Choose a nice voice if available
-        const voices = synthesisRef.current.getVoices()
-        const preferredVoice = voices.find(v => v.name.includes('Google US English') || v.name.includes('Samantha'))
-        if (preferredVoice) utterance.voice = preferredVoice
-
-        synthesisRef.current.speak(utterance)
     }
+
 
     if (!isOpen || !mounted) return null
 
     return createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="relative w-full max-w-lg overflow-hidden bg-dark-900 border border-white/10 rounded-3xl shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="relative w-full max-w-2xl bg-dark-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col items-center">
 
-                {/* Close Button */}
-                <button
-                    onClick={onClose}
-                    className="absolute top-4 right-4 p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors z-10"
-                >
-                    <X className="w-5 h-5" />
-                </button>
+                {/* Header */}
+                <div className="absolute top-0 w-full p-4 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent">
+                    <div className="flex items-center gap-2 text-white/50 text-sm">
+                        <Sparkles className="w-4 h-4 text-accent-primary" />
+                        <span>Voice Session • {meetingTitle}</span>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="text-gray-400 hover:text-white transition-colors"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
 
-                {/* Content */}
-                <div className="flex flex-col items-center justify-center p-12 space-y-8 text-center">
+                {/* Main Visualizer Area */}
+                <div className="w-full h-80 bg-gradient-to-b from-dark-950 to-dark-900 flex items-center justify-center relative">
+                    <VoiceVisualizer
+                        mode={state}
+                        audioStream={mediaStreamRef.current}
+                        audioElement={audioRef.current}
+                    />
 
-                    {/* Header */}
-                    <div className="space-y-2">
-                        <h3 className="text-xl font-semibold text-white tracking-wide flex items-center justify-center gap-2">
-                            <Sparkles className="w-5 h-5 text-accent-primary animate-pulse" />
-                            Voice Mode
-                        </h3>
-                        <p className="text-sm text-gray-400 font-medium">
-                            {meetingTitle}
+                    {/* Status Text Overlay */}
+                    <div className="absolute bottom-6 text-center animate-in slide-in-from-bottom-2 fade-in">
+                        <p className={`text-lg font-medium tracking-wide ${state === 'listening' ? 'text-accent-primary animate-pulse' :
+                            state === 'processing' ? 'text-purple-400' :
+                                state === 'speaking' ? 'text-cyan-400' : 'text-gray-500'
+                            }`}>
+                            {state === 'listening' && 'Listening...'}
+                            {state === 'processing' && 'Thinking...'}
+                            {state === 'speaking' && 'Speaking...'}
+                            {state === 'idle' && 'Ready'}
                         </p>
                     </div>
-
-                    {/* Visualizer / Orb */}
-                    <div className="relative flex items-center justify-center w-32 h-32">
-                        {/* Pulsing Rings */}
-                        {state === 'listening' && (
-                            <>
-                                <div className="absolute inset-0 bg-accent-primary/20 rounded-full animate-ping" />
-                                <div className="absolute inset-0 bg-accent-primary/10 rounded-full animate-ping delay-100" />
-                            </>
-                        )}
-
-                        {state === 'processing' && (
-                            <div className="absolute inset-0 border-4 border-t-accent-primary border-r-accent-primary/50 border-white/5 rounded-full animate-spin" />
-                        )}
-
-                        {state === 'speaking' && (
-                            <div className="absolute inset-0 bg-accent-secondary/20 rounded-full animate-pulse duration-1000" />
-                        )}
-
-                        {/* Main Icon Circle */}
-                        <div className={`
-              relative z-10 flex items-center justify-center w-24 h-24 rounded-full border-2 transition-all duration-500
-              ${state === 'listening' ? 'bg-accent-primary border-accent-primary shadow-lg shadow-accent-primary/40' : ''}
-              ${state === 'processing' ? 'bg-dark-800 border-white/10' : ''}
-              ${state === 'speaking' ? 'bg-accent-secondary border-accent-secondary shadow-lg shadow-accent-secondary/40' : ''}
-              ${state === 'idle' ? 'bg-dark-800 border-white/10 hover:border-accent-primary/50' : ''}
-            `}>
-                            {state === 'listening' && <Mic className="w-10 h-10 text-white" />}
-                            {state === 'processing' && <Loader2 className="w-10 h-10 text-accent-primary animate-spin" />}
-                            {state === 'speaking' && <Volume2 className="w-10 h-10 text-white animate-pulse" />}
-                            {state === 'idle' && <MicOff className="w-10 h-10 text-gray-500" />}
-                        </div>
-                    </div>
-
-                    {/* Status Text & Transcript */}
-                    <div className="space-y-4 max-w-sm">
-                        <div className="h-6">
-                            {state === 'listening' && <span className="text-accent-primary font-medium animate-pulse">Listening...</span>}
-                            {state === 'processing' && <span className="text-gray-400 font-medium">Processing...</span>}
-                            {state === 'speaking' && <span className="text-accent-secondary font-medium">Speaking...</span>}
-                            {state === 'idle' && !error && <span className="text-gray-500 text-sm">Tap mic to speak</span>}
-                            {error && <span className="text-red-400 text-sm">{error}</span>}
-                        </div>
-
-                        <div className="min-h-[60px] flex items-center justify-center">
-                            {transcript && state !== 'speaking' && (
-                                <p className="text-lg text-white font-medium leading-relaxed animate-in slide-in-from-bottom-2">
-                                    "{transcript}"
-                                </p>
-                            )}
-                            {state === 'speaking' && (
-                                <p className="text-lg text-gray-200 font-medium leading-relaxed animate-in slide-in-from-bottom-2 line-clamp-3">
-                                    {aiResponse}
-                                </p>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Controls */}
-                    <div className="pt-4">
-                        {state === 'idle' ? (
-                            <button
-                                onClick={startListening}
-                                className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-sm font-medium text-white transition-all"
-                            >
-                                Start Speaking
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => {
-                                    stopListening()
-                                    if (synthesisRef.current) synthesisRef.current.cancel()
-                                    setState('idle')
-                                }}
-                                className="px-6 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-full text-sm font-medium text-red-400 transition-all"
-                            >
-                                Stop
-                            </button>
-                        )}
-                    </div>
-
                 </div>
+
+                {/* AI Text Response Display */}
+                <div className="w-full p-6 bg-dark-900 border-t border-white/5 min-h-[120px]">
+                    {error ? (
+                        <div className="flex items-center justify-center gap-2 text-red-400">
+                            <AlertCircle className="w-5 h-5" />
+                            <p>{error}</p>
+                        </div>
+                    ) : (
+                        <p className="text-center text-gray-300 text-lg leading-relaxed font-light">
+                            {aiResponse || "Tap the microphone to start speaking..."}
+                        </p>
+                    )}
+                </div>
+
+                {/* Controls */}
+                <div className="p-6 w-full flex flex-col items-center justify-center gap-4 bg-dark-950/50">
+                    {/* Error Message (centered above controls) */}
+                    {error && (
+                        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 bg-red-500/10 px-4 py-2 rounded-full border border-red-500/20 mb-2">
+                            <AlertCircle className="w-4 h-4 text-red-400" />
+                            <span className="text-red-400 text-xs font-medium">{error}</span>
+                        </div>
+                    )}
+
+                    <div className="flex items-center gap-3 w-full max-w-md">
+                        <button
+                            onClick={() => state === 'listening' ? stopListening() : startListening()}
+                            className={`flex-shrink-0 p-4 rounded-full transition-all duration-300 transform hover:scale-105 ${state === 'listening'
+                                ? 'bg-red-500/20 text-red-500 border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                                : 'bg-accent-primary text-dark-950 shadow-[0_0_20px_rgba(56,189,248,0.4)] hover:shadow-[0_0_30px_rgba(56,189,248,0.6)]'
+                                }`}
+                        >
+                            {state === 'listening' ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                        </button>
+
+                        {/* Text Input Fallback */}
+                        <form
+                            onSubmit={(e) => {
+                                e.preventDefault()
+                                const form = e.target as HTMLFormElement
+                                const input = form.elements.namedItem('query') as HTMLInputElement
+                                if (input.value.trim()) {
+                                    if (state === 'listening') stopListening()
+                                    processQuery(input.value)
+                                    input.value = ''
+                                }
+                            }}
+                            className="flex-1"
+                        >
+                            <input
+                                name="query"
+                                type="text"
+                                placeholder="Type a message..."
+                                className="w-full bg-white/5 border border-white/10 rounded-full px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-accent-primary/50 focus:bg-white/10 transition-all text-sm backdrop-blur-md"
+                                autoComplete="off"
+                            />
+                        </form>
+                    </div>
+                </div>
+
             </div>
         </div>,
         document.body

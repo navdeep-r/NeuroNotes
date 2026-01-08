@@ -18,14 +18,26 @@ async function upsertMinuteWindow(meetingId, data) {
     data.minuteIndex = minuteIndex;
   }
 
+  // Separate push (segments) and set (metadata) operations
+  const updateOp = {};
+  const { segment, ...rest } = data;
+
+  if (segment) {
+    updateOp.$push = { segments: segment };
+  }
+
+  // Use $set for other fields (meetingId is always required)
+  updateOp.$set = {
+    ...rest,
+    meetingId
+  };
+
+  // If this is a new document (upsert), we might want to initialize fields, 
+  // but $set combined with upsert works fine.
+
   const updated = await Minute.findOneAndUpdate(
     filter,
-    {
-      $set: {
-        ...data,
-        meetingId
-      }
-    },
+    updateOp,
     { upsert: true, new: true }
   );
 
