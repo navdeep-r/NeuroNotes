@@ -71,6 +71,7 @@ export interface Meeting {
   endTime?: Date
   duration?: number
   participants: Speaker[]
+  meetingLink?: string
   transcript: TranscriptEntry[]
   summary?: MeetingSummary
 }

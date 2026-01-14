@@ -7,6 +7,7 @@ async function createMeeting(meetingData) {
   const meeting = new Meeting({
     title: meetingData.title || 'Untitled Meeting',
     status: meetingData.status || 'scheduled',
+    meetingLink: meetingData.meetingLink || '',
     startTime: meetingData.startTime || new Date(),
     participants: meetingData.participants || [],
     summary: meetingData.summary || {

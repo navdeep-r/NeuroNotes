@@ -64,6 +64,7 @@ function transformMeeting(doc) {
     startTime: toDate(data.startTime),
     endTime: toDate(data.endTime),
     participants: data.participants || [],
+    meetingLink: data.meetingLink || null,
     summary: data.summary || null,
   };
 }
@@ -190,13 +191,19 @@ function normalizeVisualType(type) {
 function transformAutomation(doc) {
   if (!doc) return null;
   const data = extractData(doc);
-  const id = (doc.id || doc._id || data.id || data._id || '').toString();
+  const id = (doc._id || data._id || doc.id || data.id || '').toString();
 
   return {
-    ...data,
     id,
+    intent: data.intent,
+    status: data.status,
+    triggerText: data.triggerText,
+    parameters: data.parameters instanceof Map ? Object.fromEntries(data.parameters) : (data.parameters || {}),
+    editedParameters: data.editedParameters instanceof Map ? Object.fromEntries(data.editedParameters) : (data.editedParameters || null),
+    confidenceScore: data.confidenceScore || 0,
+    createdAt: data.createdAt,
     meetingId: data.meetingId && typeof data.meetingId === 'object' ? {
-      id: (data.meetingId.id || data.meetingId._id || '').toString(),
+      id: (data.meetingId._id || data.meetingId.id || '').toString(),
       title: data.meetingId.title
     } : (data.meetingId ? data.meetingId.toString() : null)
   };

@@ -134,12 +134,13 @@ exports.getMeetingTranscript = async (req, res) => {
  */
 exports.createMeeting = async (req, res) => {
     try {
-        const { title, participants } = req.body;
+        const { title, participants, status, startTime, meetingLink } = req.body;
         const meeting = await createMeeting({
             title: title || 'New Meeting',
             participants: participants || [],
-            status: 'live',
-            startTime: new Date(),
+            status: status || 'live',
+            startTime: startTime ? new Date(startTime) : new Date(),
+            meetingLink: meetingLink || ''
         });
         res.status(201).json(transformMeeting(meeting));
     } catch (err) {

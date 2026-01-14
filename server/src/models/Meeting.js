@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const MeetingSchema = new mongoose.Schema({
     title: { type: String, default: 'Untitled Meeting' },
     status: { type: String, enum: ['live', 'completed', 'scheduled'], default: 'scheduled' },
+    meetingLink: { type: String },
     startTime: { type: Date, default: Date.now },
     endTime: { type: Date },
     participants: [String],

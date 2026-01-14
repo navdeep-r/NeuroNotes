@@ -77,7 +77,7 @@ export default function ActionsView() {
                                             </span>
                                         </div>
                                         <h3 className="text-lg font-semibold text-white mb-1">
-                                            {action.intent === 'schedule_meeting' ? 'Schedule a new meeting' : 'Create work ticket'}
+                                            {action.parameters.title || (action.intent === 'schedule_meeting' ? 'Schedule a new meeting' : 'Create work ticket')}
                                         </h3>
                                         <p className="text-gray-400 text-sm italic">
                                             "&shy;{action.triggerText}&shy;"
@@ -101,15 +101,27 @@ export default function ActionsView() {
                                             DATE & TIME CONTEXT
                                         </div>
                                         {isEditing ? (
-                                            <input
-                                                type="text"
-                                                value={editBuffer.raw_time_context || ''}
-                                                onChange={(e) => setEditBuffer({ ...editBuffer, raw_time_context: e.target.value })}
-                                                className="bg-dark-900 border border-white/10 rounded px-3 py-1.5 text-sm text-white w-full focus:outline-none focus:border-accent-primary"
-                                            />
+                                            <div className="space-y-2">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Date (YYYY-MM-DD)"
+                                                    value={editBuffer.date || ''}
+                                                    onChange={(e) => setEditBuffer({ ...editBuffer, date: e.target.value })}
+                                                    className="bg-dark-900 border border-white/10 rounded px-3 py-1.5 text-sm text-white w-full focus:outline-none focus:border-accent-primary"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Time (HH:MM AM/PM)"
+                                                    value={editBuffer.time || ''}
+                                                    onChange={(e) => setEditBuffer({ ...editBuffer, time: e.target.value })}
+                                                    className="bg-dark-900 border border-white/10 rounded px-3 py-1.5 text-sm text-white w-full focus:outline-none focus:border-accent-primary"
+                                                />
+                                            </div>
                                         ) : (
                                             <div className="text-white text-sm font-medium">
-                                                {action.parameters.raw_time_context || 'No specific time detected'}
+                                                {action.parameters.date && action.parameters.time
+                                                    ? `${action.parameters.date} at ${action.parameters.time}`
+                                                    : (action.parameters.raw_time_context || 'No specific time detected')}
                                             </div>
                                         )}
                                     </div>
