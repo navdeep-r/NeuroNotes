@@ -23,6 +23,7 @@ app.use('/api/meetings', meetingRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/voice', voiceRoutes);
 app.use('/api/automation', automationRoutes);
+app.use('/api/workspaces', require('./routes/workspace.routes'));
 
 app.get('/', (req, res) => {
     res.send('Neuro_notes Backend Running');

@@ -10,6 +10,8 @@ async function createMeeting(meetingData) {
     meetingLink: meetingData.meetingLink || '',
     startTime: meetingData.startTime || new Date(),
     participants: meetingData.participants || [],
+    workspaceId: meetingData.workspaceId,
+    selectedRecipients: meetingData.selectedRecipients || [],
     summary: meetingData.summary || {
       keyPoints: [],
       decisions: [],

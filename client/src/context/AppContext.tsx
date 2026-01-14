@@ -254,6 +254,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const pendingRes = await fetch('http://localhost:5000/api/automation/pending');
           const pending = await pendingRes.json();
           dispatch({ type: 'SET_PENDING_AUTOMATIONS', payload: pending });
+
+          // Refresh meetings list in case a meeting was scheduled
+          const meetingsRes = await fetch('http://localhost:5000/api/meetings');
+          const meetingsData = await meetingsRes.json();
+          const realMeetings = meetingsData.map((m: any) => ({
+            id: m.id,
+            title: m.title,
+            status: m.status,
+            startTime: new Date(m.startTime),
+            endTime: m.endTime ? new Date(m.endTime) : undefined,
+            participants: m.participants || [],
+            transcript: [],
+            summary: m.summary || {},
+            meetingLink: m.meetingLink
+          }));
+          dispatch({ type: 'SET_MEETINGS', payload: realMeetings });
         }
       } catch (err) {
         console.error('Failed to approve automation:', err);

@@ -7,6 +7,12 @@ const MeetingSchema = new mongoose.Schema({
     startTime: { type: Date, default: Date.now },
     endTime: { type: Date },
     participants: [String],
+    // Post-Meeting Email Context
+    workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace' },
+    selectedRecipients: [{
+        name: String,
+        email: String
+    }],
     summary: {
         keyPoints: [String],
         // Enhanced Summary Fields

@@ -1,4 +1,5 @@
-import { User, Bell, Palette, Shield, HelpCircle } from 'lucide-react'
+import { User, Bell, Palette, Shield, HelpCircle, Users } from 'lucide-react'
+import WorkspaceSettings from './WorkspaceSettings'
 
 interface SettingsSectionProps {
   title: string
@@ -38,13 +39,11 @@ function Toggle({ label, enabled, onChange }: ToggleProps) {
       <span className="text-gray-300 text-sm">{label}</span>
       <button
         onClick={onChange}
-        className={`w-11 h-6 rounded-full transition-smooth ${
-          enabled ? 'bg-accent-primary' : 'bg-dark-500'
-        }`}
+        className={`w-11 h-6 rounded-full transition-smooth ${enabled ? 'bg-accent-primary' : 'bg-dark-500'
+          }`}
       >
-        <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
-          enabled ? 'translate-x-5' : 'translate-x-0.5'
-        }`} />
+        <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0.5'
+          }`} />
       </button>
     </div>
   )
@@ -98,10 +97,10 @@ export default function SettingsView() {
           icon={Bell}
         >
           <div className="space-y-1">
-            <Toggle label="Meeting reminders" enabled={true} onChange={() => {}} />
-            <Toggle label="Action item alerts" enabled={true} onChange={() => {}} />
-            <Toggle label="Weekly summary emails" enabled={false} onChange={() => {}} />
-            <Toggle label="Real-time transcript updates" enabled={true} onChange={() => {}} />
+            <Toggle label="Meeting reminders" enabled={true} onChange={() => { }} />
+            <Toggle label="Action item alerts" enabled={true} onChange={() => { }} />
+            <Toggle label="Weekly summary emails" enabled={false} onChange={() => { }} />
+            <Toggle label="Real-time transcript updates" enabled={true} onChange={() => { }} />
           </div>
         </SettingsSection>
 
@@ -111,9 +110,9 @@ export default function SettingsView() {
           icon={Palette}
         >
           <div className="space-y-1">
-            <Toggle label="Dark mode" enabled={true} onChange={() => {}} />
-            <Toggle label="Compact view" enabled={false} onChange={() => {}} />
-            <Toggle label="Show timestamps" enabled={true} onChange={() => {}} />
+            <Toggle label="Dark mode" enabled={true} onChange={() => { }} />
+            <Toggle label="Compact view" enabled={false} onChange={() => { }} />
+            <Toggle label="Show timestamps" enabled={true} onChange={() => { }} />
           </div>
         </SettingsSection>
 
@@ -123,9 +122,17 @@ export default function SettingsView() {
           icon={Shield}
         >
           <div className="space-y-1">
-            <Toggle label="Two-factor authentication" enabled={false} onChange={() => {}} />
-            <Toggle label="Share analytics with team" enabled={true} onChange={() => {}} />
+            <Toggle label="Two-factor authentication" enabled={false} onChange={() => { }} />
+            <Toggle label="Share analytics with team" enabled={true} onChange={() => { }} />
           </div>
+        </SettingsSection>
+
+        <SettingsSection
+          title="Workspaces & Teams"
+          description="Manage recipient groups for meeting summaries"
+          icon={Users}
+        >
+          <WorkspaceSettings />
         </SettingsSection>
 
         <SettingsSection

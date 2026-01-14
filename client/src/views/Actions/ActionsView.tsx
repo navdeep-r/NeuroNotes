@@ -23,13 +23,19 @@ export default function ActionsView() {
     }
 
     const handleApprove = async (id: string) => {
-        await approveAutomation(id, editBuffer)
+        // If not editing, editBuffer is empty, which is fine (AutomationService handles it)
+        // BUT if we were editing another item and clicked approve on this one, editBuffer might leak.
+        // We should strictly use editBuffer ONLY if editingId === id.
+        const params = (editingId === id) ? editBuffer : {};
+        await approveAutomation(id, params)
         setEditingId(null)
+        setEditBuffer({})
     }
 
     const handleReject = async (id: string) => {
         await rejectAutomation(id)
         setEditingId(null)
+        setEditBuffer({})
     }
 
     return (
@@ -94,54 +100,107 @@ export default function ActionsView() {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                    {/* Parameter: Raw Context (Editable) */}
-                                    <div className="p-4 rounded-xl bg-white/5 border border-white/5">
-                                        <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
-                                            <Calendar className="w-3.5 h-3.5" />
-                                            DATE & TIME CONTEXT
-                                        </div>
-                                        {isEditing ? (
-                                            <div className="space-y-2">
-                                                <input
-                                                    type="text"
-                                                    placeholder="Date (YYYY-MM-DD)"
-                                                    value={editBuffer.date || ''}
-                                                    onChange={(e) => setEditBuffer({ ...editBuffer, date: e.target.value })}
-                                                    className="bg-dark-900 border border-white/10 rounded px-3 py-1.5 text-sm text-white w-full focus:outline-none focus:border-accent-primary"
-                                                />
-                                                <input
-                                                    type="text"
-                                                    placeholder="Time (HH:MM AM/PM)"
-                                                    value={editBuffer.time || ''}
-                                                    onChange={(e) => setEditBuffer({ ...editBuffer, time: e.target.value })}
-                                                    className="bg-dark-900 border border-white/10 rounded px-3 py-1.5 text-sm text-white w-full focus:outline-none focus:border-accent-primary"
-                                                />
+                                    {action.intent === 'email_summary' ? (
+                                        <>
+                                            {/* Recipients Card */}
+                                            <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+                                                <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
+                                                    <div className="w-3.5 h-3.5" />
+                                                    RECIPIENTS ({action.parameters.recipients?.length || 0})
+                                                </div>
+                                                <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
+                                                    {action.parameters.recipients?.map((r: any, idx: number) => (
+                                                        <div key={idx} className="text-sm text-white flex justify-between">
+                                                            <span>{r.name}</span>
+                                                            <span className="text-gray-500 text-xs">{r.email}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
-                                        ) : (
-                                            <div className="text-white text-sm font-medium">
-                                                {action.parameters.date && action.parameters.time
-                                                    ? `${action.parameters.date} at ${action.parameters.time}`
-                                                    : (action.parameters.raw_time_context || 'No specific time detected')}
-                                            </div>
-                                        )}
-                                    </div>
 
-                                    <div className="p-4 rounded-xl bg-white/5 border border-white/5">
-                                        <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
-                                            <Clock className="w-3.5 h-3.5" />
-                                            DETECTION WINDOW
-                                        </div>
-                                        <div className="text-white text-sm font-medium">
-                                            {new Date(action.createdAt).toLocaleTimeString()}
-                                        </div>
-                                    </div>
+                                            {/* Summary Preview Card */}
+                                            <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+                                                <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
+                                                    <Edit3 className="w-3.5 h-3.5" />
+                                                    SUMMARY PREVIEW
+                                                </div>
+                                                <div className="max-h-32 overflow-y-auto custom-scrollbar text-sm text-gray-300 space-y-2">
+                                                    <div>
+                                                        <span className="text-accent-primary font-bold text-xs block mb-1">KEY POINTS</span>
+                                                        <ul className="list-disc pl-4 text-xs space-y-1">
+                                                            {action.parameters.summary?.keyPoints?.slice(0, 3).map((kp: string, i: number) => (
+                                                                <li key={i}>{kp}</li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                    {action.parameters.summary?.actionItems?.length > 0 && (
+                                                        <div className="pt-2">
+                                                            <span className="text-accent-primary font-bold text-xs block mb-1">ACTION ITEMS</span>
+                                                            <ul className="list-disc pl-4 text-xs space-y-1">
+                                                                {action.parameters.summary?.actionItems?.slice(0, 2).map((ai: any, i: number) => (
+                                                                    <li key={i}>{ai.content} ({ai.assignee})</li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            {/* Parameter: Raw Context (Editable) */}
+                                            <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+                                                <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
+                                                    <Calendar className="w-3.5 h-3.5" />
+                                                    DATE & TIME CONTEXT
+                                                </div>
+                                                {isEditing ? (
+                                                    <div className="space-y-2">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Date (YYYY-MM-DD)"
+                                                            value={editBuffer.date || ''}
+                                                            onChange={(e) => setEditBuffer({ ...editBuffer, date: e.target.value })}
+                                                            className="bg-dark-900 border border-white/10 rounded px-3 py-1.5 text-sm text-white w-full focus:outline-none focus:border-accent-primary"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Time (HH:MM AM/PM)"
+                                                            value={editBuffer.time || ''}
+                                                            onChange={(e) => setEditBuffer({ ...editBuffer, time: e.target.value })}
+                                                            className="bg-dark-900 border border-white/10 rounded px-3 py-1.5 text-sm text-white w-full focus:outline-none focus:border-accent-primary"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-white text-sm font-medium">
+                                                        {action.parameters.date && action.parameters.time
+                                                            ? `${action.parameters.date} at ${action.parameters.time}`
+                                                            : (action.parameters.raw_time_context || 'No specific time detected')}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+                                                <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
+                                                    <Clock className="w-3.5 h-3.5" />
+                                                    DETECTION WINDOW
+                                                </div>
+                                                <div className="text-white text-sm font-medium">
+                                                    {new Date(action.createdAt).toLocaleTimeString()}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 <div className="flex items-center justify-between pt-4 border-t border-white/5">
                                     <div className="flex items-center gap-3">
                                         {isEditing ? (
                                             <button
-                                                onClick={() => setEditingId(null)}
+                                                onClick={() => {
+                                                    setEditingId(null);
+                                                    setEditBuffer({});
+                                                }}
                                                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 text-sm transition-all text-xs font-bold"
                                             >
                                                 Cancel

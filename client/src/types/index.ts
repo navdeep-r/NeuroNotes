@@ -15,6 +15,19 @@ export interface Highlight {
   text: string
 }
 
+export interface WorkspaceMember {
+  name: string
+  email: string
+}
+
+export interface Workspace {
+  _id: string
+  name: string
+  members: WorkspaceMember[]
+  createdAt: string
+  updatedAt: string
+}
+
 export interface AutomationEvent {
   id: string
   intent: string
@@ -71,6 +84,8 @@ export interface Meeting {
   endTime?: Date
   duration?: number
   participants: Speaker[]
+  workspaceId?: string
+  selectedRecipients?: { name: string; email: string }[]
   meetingLink?: string
   transcript: TranscriptEntry[]
   summary?: MeetingSummary

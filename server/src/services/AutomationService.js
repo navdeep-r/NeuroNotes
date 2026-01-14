@@ -160,7 +160,45 @@ class AutomationService {
         logDoc.approvedAt = new Date();
         await logDoc.save();
 
+        // ---------------------------------------------------------
+        // Action Execution Logic (Internal Limits / Side Effects)
+        // ---------------------------------------------------------
         try {
+            // Intent: Schedule Meeting -> Create internal "Scheduled" meeting
+            if (logDoc.intent === 'schedule_meeting') {
+                const params = (editedParameters && editedParameters.size > 0)
+                    ? Object.fromEntries(editedParameters)
+                    : (logDoc.parameters instanceof Map ? Object.fromEntries(logDoc.parameters) : logDoc.parameters);
+
+                console.log('[AutomationService] Creating internal scheduled meeting for approval...');
+
+                // Parse Start Time
+                let startTime = new Date();
+                if (params.date && params.time) {
+                    const dateStr = params.date; // YYYY-MM-DD
+                    const timeStr = params.time; // HH:MM AM/PM
+                    // Simple parse attempt or use library if needed (assuming ISO-ish or simple format from LLM)
+                    // For now, let's try constructing it. 
+                    // Note: LLMService usually returns specific formats.
+                    // If simple parse fails, fallback to 'next hour'.
+                    const combined = new Date(`${dateStr} ${timeStr}`);
+                    if (!isNaN(combined.getTime())) {
+                        startTime = combined;
+                    }
+                }
+
+                await require('../repositories/meetingRepository').createMeeting({
+                    title: params.title || 'Scheduled Meeting',
+                    startTime: startTime,
+                    status: 'scheduled',
+                    participants: params.attendees || [], // basic array of strings
+                    meetingLink: 'https://meet.google.com/cbg-dbih-jjy', // Hardcoded per requirement
+                    summary: { keyPoints: [], decisions: [], actionItems: [] }
+                });
+                console.log('[AutomationService] Internal meeting created.');
+            }
+
+            // Trigger n8n Webhook
             await this.triggerWebhook(logDoc, {
                 speaker: 'User (Manual Approval)',
                 timestamp: new Date()
@@ -195,25 +233,82 @@ class AutomationService {
         }
 
         try {
-            const paramsToUse = (logDoc.editedParameters && logDoc.editedParameters.size > 0)
-                ? logDoc.editedParameters
-                : logDoc.parameters;
+            // Convert parameters from Mongoose Map to plain object
+            const originalParams = logDoc.parameters instanceof Map 
+                ? Object.fromEntries(logDoc.parameters) 
+                : (logDoc.parameters || {});
+            
+            const editedParams = (logDoc.editedParameters && logDoc.editedParameters.size > 0)
+                ? Object.fromEntries(logDoc.editedParameters)
+                : {};
 
-            const finalParams = paramsToUse instanceof Map
-                ? Object.fromEntries(paramsToUse)
-                : (paramsToUse || {});
+            // Merge: Prefer edited parameters if they exist
+            let finalParams = { ...originalParams, ...editedParams };
+
+            // Debug log the merged params
+            console.log('[AutomationService] Merged params:', JSON.stringify(finalParams, null, 2));
+
+            // For email_summary intent, pre-format recipients and body
+            if (logDoc.intent === 'email_summary') {
+                let recipientEmails = '';
+                const recipients = finalParams.recipients;
+
+                if (Array.isArray(recipients) && recipients.length > 0) {
+                    recipientEmails = recipients
+                        .map(r => (typeof r === 'object' && r.email) ? r.email : (typeof r === 'string' ? r : ''))
+                        .filter(e => e && e.includes('@'))
+                        .join(',');
+                } else if (typeof recipients === 'string') {
+                    recipientEmails = recipients;
+                }
+
+                if (!recipientEmails) {
+                    throw new Error('No valid recipient emails found for summary delivery.');
+                }
+
+                // Generate a beautiful HTML Email Body
+                const summary = finalParams.summary || {};
+                const keyPointsHtml = (summary.keyPoints || []).map(kp => `<li>${kp}</li>`).join('');
+                const decisionsHtml = (summary.decisions || []).map(d => `<li>${d.content || d}</li>`).join('');
+                const actionsHtml = (summary.actionItems || []).map(a => `<li><b>${a.content}</b> (Assignee: ${a.assignee || 'Unassigned'})</li>`).join('');
+
+                const emailBody = `
+                    <div style="font-family: sans-serif; max-width: 600px; color: #333;">
+                        <h2 style="color: #6366f1;">Meeting Summary: ${finalParams.meetingTitle || 'Untitled'}</h2>
+                        <p>Hi there, here are the key takeaways from the meeting held on ${new Date(finalParams.meetingDate).toLocaleDateString()}.</p>
+                        
+                        ${keyPointsHtml ? `<h3>Key Points</h3><ul>${keyPointsHtml}</ul>` : ''}
+                        ${decisionsHtml ? `<h3>Decisions Made</h3><ul>${decisionsHtml}</ul>` : ''}
+                        ${actionsHtml ? `<h3>Action Items</h3><ul>${actionsHtml}</ul>` : ''}
+                        
+                        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                        <p style="font-size: 12px; color: #999;">Sent via MinuteFlow AI Intelligence</p>
+                    </div>
+                `;
+
+                // Set these for easy access in n8n
+                finalParams.recipientEmails = recipientEmails;
+                finalParams.emailBody = emailBody;
+                
+                console.log(`[AutomationService] Generated email summary for: ${recipientEmails}`);
+            }
 
             const payload = {
                 automationId: logDoc._id,
                 meetingId: logDoc.meetingId,
                 intent: logDoc.intent,
                 parameters: finalParams,
+                // Add these to top level as well for easier n8n mapping
+                recipientEmails: finalParams.recipientEmails,
+                emailBody: finalParams.emailBody,
                 trigger: {
                     text: logDoc.triggerText,
                     speaker: meta.speaker,
                     timestamp: meta.timestamp
                 }
             };
+
+            console.log('[AutomationService] Sending payload to n8n:', JSON.stringify(payload, null, 2));
 
             const response = await fetch(process.env.N8N_WEBHOOK_URL, {
                 method: 'POST',
