@@ -1,4 +1,3 @@
-import { mockVisualizations } from '../../data/mockData'
 import { Visualization } from '../../types'
 import { LineChart, BarChart3, Clock, PieChart } from 'lucide-react'
 
@@ -22,14 +21,14 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
   // Simple chart representation
   const renderChart = () => {
     const maxValue = Math.max(...visualization.data.values)
-    
+
     switch (visualization.type) {
       case 'bar':
         return (
           <div className="flex items-end gap-2 h-32 mt-4">
             {visualization.data.values.map((value, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div 
+                <div
                   className="w-full bg-gradient-to-t from-accent-primary to-accent-secondary rounded-t"
                   style={{ height: `${(value / maxValue) * 100}%` }}
                 />
@@ -46,7 +45,7 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
                 fill="none"
                 stroke="url(#lineGradient)"
                 strokeWidth="2"
-                points={visualization.data.values.map((v, i) => 
+                points={visualization.data.values.map((v, i) =>
                   `${(i / (visualization.data.values.length - 1)) * 100},${50 - (v / maxValue) * 45}`
                 ).join(' ')}
               />
@@ -63,7 +62,7 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
         const total = visualization.data.values.reduce((a, b) => a + b, 0)
         const colors = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b']
         let currentAngle = 0
-        
+
         return (
           <div className="flex items-center gap-4 mt-4">
             <svg className="w-24 h-24" viewBox="0 0 32 32">
@@ -71,13 +70,13 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
                 const angle = (value / total) * 360
                 const startAngle = currentAngle
                 currentAngle += angle
-                
+
                 const x1 = 16 + 14 * Math.cos((startAngle - 90) * Math.PI / 180)
                 const y1 = 16 + 14 * Math.sin((startAngle - 90) * Math.PI / 180)
                 const x2 = 16 + 14 * Math.cos((startAngle + angle - 90) * Math.PI / 180)
                 const y2 = 16 + 14 * Math.sin((startAngle + angle - 90) * Math.PI / 180)
                 const largeArc = angle > 180 ? 1 : 0
-                
+
                 return (
                   <path
                     key={i}
@@ -104,7 +103,7 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
               <div key={i} className="flex items-center gap-3">
                 <span className="text-xs text-gray-500 w-8">{label}</span>
                 <div className="flex-1 h-2 bg-dark-600 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-gradient-to-r from-accent-primary to-accent-secondary rounded-full"
                     style={{ width: `${(visualization.data.values[i] / maxValue) * 100}%` }}
                   />
@@ -137,9 +136,10 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
 
 /**
  * VisualIntelligenceView - Grid of AI-generated visualizations
- * Implements Requirements 10.1-10.4 for visual intelligence
  */
 export default function VisualIntelligenceView() {
+  const visualizations: Visualization[] = []
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -149,11 +149,21 @@ export default function VisualIntelligenceView() {
       </div>
 
       {/* Visualization Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {mockVisualizations.map((viz) => (
-          <VisualizationCard key={viz.id} visualization={viz} />
-        ))}
-      </div>
+      {visualizations.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center glass-card">
+          <BarChart3 className="w-12 h-12 text-gray-600 mb-4" />
+          <h2 className="text-xl font-medium text-white mb-2">No visualizations found</h2>
+          <p className="text-gray-500 max-w-sm">
+            AI-generated charts and insights will appear here once your meetings are processed.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {visualizations.map((viz) => (
+            <VisualizationCard key={viz.id} visualization={viz} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

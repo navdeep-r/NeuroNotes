@@ -7,6 +7,7 @@ import MeetingsHistoryView from './views/MeetingsHistory/MeetingsHistoryView'
 import VisualIntelligenceView from './views/VisualIntelligence/VisualIntelligenceView'
 import InsightsView from './views/Insights/InsightsView'
 import SettingsView from './views/Settings/SettingsView'
+import ActionsView from './views/Actions/ActionsView'
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route path="history" element={<MeetingsHistoryView />} />
           <Route path="visuals" element={<VisualIntelligenceView />} />
           <Route path="insights" element={<InsightsView />} />
+          <Route path="actions" element={<ActionsView />} />
           <Route path="settings" element={<SettingsView />} />
           {/* Catch-all redirect to dashboard */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

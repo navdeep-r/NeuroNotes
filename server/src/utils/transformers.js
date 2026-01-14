@@ -184,6 +184,24 @@ function normalizeVisualType(type) {
   return 'bar'; // Default for 'generic' or unknown types
 }
 
+/**
+ * Transform MongoDB automation document to frontend interface
+ */
+function transformAutomation(doc) {
+  if (!doc) return null;
+  const data = extractData(doc);
+  const id = (doc.id || doc._id || data.id || data._id || '').toString();
+
+  return {
+    ...data,
+    id,
+    meetingId: data.meetingId && typeof data.meetingId === 'object' ? {
+      id: (data.meetingId.id || data.meetingId._id || '').toString(),
+      title: data.meetingId.title
+    } : (data.meetingId ? data.meetingId.toString() : null)
+  };
+}
+
 module.exports = {
   toDate,
   extractData,
@@ -191,6 +209,7 @@ module.exports = {
   transformAction,
   transformDecision,
   transformVisual,
+  transformAutomation,
   normalizeStatus,
   normalizeVisualType,
 };
