@@ -1,9 +1,7 @@
 const { createMeeting, getMeetingById, getLatestLiveMeeting } = require('../repositories/meetingRepository');
 const { upsertMinuteWindow } = require('../repositories/minuteRepository');
-
 const LLMService = require('../services/LLMService');
 const SimulationService = require('../services/SimulationService');
-const AutomationService = require('../services/AutomationService');
 const { DEMO_MODE } = require('../config/env');
 
 /**
@@ -63,13 +61,6 @@ exports.ingestWebhook = async (req, res) => {
                 speaker: block.personName,
                 processed: false,
             });
-
-            // Trigger automation detection for each block
-            AutomationService.processChunk(meetingId, {
-                text: block.transcriptText,
-                speaker: block.personName,
-                timestamp: block.timestamp
-            }).catch(err => console.error('[Webhook] Automation Error:', err));
         }
 
         res.status(200).json({ success: true });
@@ -137,13 +128,6 @@ exports.ingestChunk = async (req, res) => {
             speaker: speaker,
             processed: false,
         });
-
-        // Trigger Automation Detection (Async - do not await/block response)
-        AutomationService.processChunk(meetingId, {
-            text,
-            speaker: speaker, // Assuming speaker object or string
-            timestamp: chunkTime
-        }).catch(err => console.error('[Ingest] Automation Error:', err));
 
         res.status(200).json({ success: true });
     } catch (error) {

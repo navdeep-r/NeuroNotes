@@ -7,7 +7,6 @@ const ingestRoutes = require('./routes/ingest.routes');
 const meetingRoutes = require('./routes/meeting.routes');
 const chatRoutes = require('./routes/chat.routes');
 const voiceRoutes = require('./routes/voice.routes');
-const automationRoutes = require('./routes/automation.routes');
 
 const app = express();
 
@@ -22,7 +21,6 @@ app.use('/api/ingest', ingestRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/voice', voiceRoutes);
-app.use('/api/automation', automationRoutes);
 
 app.get('/', (req, res) => {
     res.send('Neuro_notes Backend Running');
