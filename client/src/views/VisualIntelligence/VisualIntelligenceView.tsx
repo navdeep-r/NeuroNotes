@@ -261,9 +261,12 @@ export default function VisualIntelligenceView() {
           <BarChart3 className="w-12 h-12 text-gray-600 mb-4" />
           <h2 className="text-xl font-medium text-white mb-2">No visualizations yet</h2>
           <p className="text-gray-500 max-w-md">
-            During a meeting, say <span className="text-accent-primary font-mono">"Hey NeuroNotes, create a visualization"</span> to start capturing data.
+            During a meeting, say: <br />
+            <span className="text-accent-primary font-mono">"Hey NeuroNotes, create a chart about [your data]. Over."</span>
             <br /><br />
-            Then say <span className="text-accent-primary font-mono">"Thanks NeuroNotes"</span> or <span className="text-accent-primary font-mono">"Done NeuroNotes"</span> to generate the chart.
+            <span className="text-gray-400 text-sm">
+              Example: "Hey NeuroNotes, create a chart showing Q1 sales were 50K, Q2 was 75K, and Q3 hit 100K. Over."
+            </span>
           </p>
         </div>
       )}

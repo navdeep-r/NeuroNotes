@@ -1,5 +1,6 @@
 const AutomationLog = require('../models/AutomationLog');
 const LLMService = require('./LLMService');
+const VisualizationTriggerService = require('./VisualizationTriggerService');
 
 class AutomationService {
     constructor() {
@@ -9,11 +10,12 @@ class AutomationService {
         // Processing locks to prevent race conditions during Grok calls
         this.isProcessing = new Set();
 
-        // Intent keywords for scheduling (used as a fallback/pre-filter)
-        this.schedulingKeywords = ['schedule', 'set up', 'create', 'book', 'plan'];
+        // Intent keywords for pre-filtering (heuristic before LLM)
+        this.schedulingKeywords = ['schedule', 'set up', 'book', 'plan', 'meeting'];
+        this.visualizationKeywords = ['chart', 'graph', 'visual', 'visualization', 'visualize', 'diagram', 'plot'];
 
         // Filler words to strip before intent detection
-        this.fillerWords = ['please', 'can', 'you', 'actually', 'just', 'um', 'uh', 'like'];
+        this.fillerWords = ['please', 'can', 'you', 'actually', 'just', 'um', 'uh', 'like', 'a', 'the'];
     }
 
     /**
@@ -21,11 +23,10 @@ class AutomationService {
      * Implements strict "hey neuro ... over" framing.
      */
     async processChunk(meetingId, chunkData) {
-        const { text } = chunkData;
+        const { text, speaker } = chunkData;
         if (!text || typeof text !== 'string') return null;
 
         // 1. Detect "hey neuro" (case-insensitive, allows punctuation/fillers between hey and neuro)
-        // Regex allows: "hey neuro", "hey, neuro", "hey... neuro", "hey neuro!"
         const startTrigger = /hey[\s,.\-!]*neuro/i;
         const startMatch = text.match(startTrigger);
 
@@ -34,12 +35,12 @@ class AutomationService {
         if (startMatch) {
             // Start a new command block from "hey neuro"
             const startIndex = startMatch.index;
-            activeBuffer = text.substring(startIndex);
+            activeBuffer = { text: text.substring(startIndex), speaker: speaker || 'Unknown' };
             this.buffers.set(meetingId, activeBuffer);
-            console.log(`[AutomationService] Match started for ${meetingId}: "${activeBuffer}"`);
+            console.log(`[AutomationService] Match started for ${meetingId}: "${activeBuffer.text}"`);
         } else if (activeBuffer) {
             // Continue existing block
-            activeBuffer += " " + text;
+            activeBuffer.text += " " + text;
             this.buffers.set(meetingId, activeBuffer);
         } else {
             // Not in a command block, ignore
@@ -48,28 +49,40 @@ class AutomationService {
 
         // 2. Detect "over" (case-insensitive) as the explicit end marker
         const endTrigger = /over/i;
-        const endMatch = activeBuffer.match(endTrigger);
+        const endMatch = activeBuffer.text.match(endTrigger);
 
         if (endMatch) {
             // Extract the final block between "hey neuro" and "over"
-            const rawBlock = activeBuffer.substring(0, endMatch.index).trim();
+            const rawBlock = activeBuffer.text.substring(0, endMatch.index).trim();
+            const blockSpeaker = activeBuffer.speaker;
             this.buffers.delete(meetingId); // Unlock buffer
 
             console.log(`[AutomationService] Full command block extracted: "${rawBlock}"`);
-            return await this.handleCommand(meetingId, rawBlock, text);
+            return await this.handleCommand(meetingId, rawBlock, text, blockSpeaker);
         }
 
         return null;
     }
 
     /**
+     * Classify intent and route to appropriate handler
+     */
+    detectIntentType(normalized) {
+        const hasScheduling = this.schedulingKeywords.some(kw => normalized.includes(kw));
+        const hasVisualization = this.visualizationKeywords.some(kw => normalized.includes(kw));
+
+        if (hasVisualization) return 'create_visualization';
+        if (hasScheduling) return 'schedule_meeting';
+        return null;
+    }
+
+    /**
      * Normalizes and classifies the extracted command block.
      */
-    async handleCommand(meetingId, rawCommand, originalSnippet) {
+    async handleCommand(meetingId, rawCommand, originalSnippet, speaker) {
         // 1. Normalization
-        // Remove the start trigger itself, punctuation, filler words, and standardize whitespace
         let normalized = rawCommand.toLowerCase()
-            .replace(/hey[\s,.\-!]*neuro/i, '')
+            .replace(/hey[\s,.\-!]*neuro(notes)?/i, '')
             .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
             .split(/\s+/)
             .filter(word => !this.fillerWords.includes(word))
@@ -78,16 +91,70 @@ class AutomationService {
 
         console.log(`[AutomationService] Normalized: "${normalized}"`);
 
-        // 2. Initial Intent Classification (Heuristic check before Grok)
-        const hasSchedulingIntent = this.schedulingKeywords.some(kw => normalized.includes(kw));
+        // 2. Initial Intent Classification (Heuristic check before LLM)
+        const intentType = this.detectIntentType(normalized);
 
-        if (!hasSchedulingIntent) {
-            console.log(`[AutomationService] No scheduling intent detected in block.`);
+        if (!intentType) {
+            console.log(`[AutomationService] No recognized intent in block.`);
             return null;
         }
 
-        // 3. Idempotency Check (Single "schedule_meeting" per meeting)
-        // Key: meetingId + intent
+        console.log(`[AutomationService] Detected intent: ${intentType}`);
+
+        // 3. Route based on intent type
+        if (intentType === 'create_visualization') {
+            // Visualization: Auto-execute (no approval needed)
+            return await this.handleVisualizationIntent(meetingId, normalized, originalSnippet, speaker);
+        } else if (intentType === 'schedule_meeting') {
+            // Scheduling: Requires approval
+            return await this.handleSchedulingIntent(meetingId, normalized, originalSnippet);
+        }
+
+        return null;
+    }
+
+    /**
+     * Handle visualization intent - auto-execute without approval
+     */
+    async handleVisualizationIntent(meetingId, normalized, originalSnippet, speaker) {
+        const lockKey = `${meetingId}_visualization`;
+
+        if (this.isProcessing.has(lockKey)) {
+            console.warn(`[AutomationService] Already processing visualization for ${meetingId}. Ignoring.`);
+            return null;
+        }
+
+        this.isProcessing.add(lockKey);
+        try {
+            console.log(`[AutomationService] Processing visualization intent...`);
+
+            // Use the existing visualization generation from VisualizationTriggerService
+            const visual = await VisualizationTriggerService.generateVisualization(
+                meetingId,
+                [`[${speaker}]: ${normalized}`],
+                [speaker],
+                'automation-trigger'
+            );
+
+            if (visual) {
+                console.log(`[AutomationService] Visualization created: ${visual.title}`);
+                return { type: 'visualization', visual };
+            } else {
+                console.log(`[AutomationService] Failed to create visualization.`);
+                return null;
+            }
+        } catch (err) {
+            console.error(`[AutomationService] Visualization error:`, err);
+            return null;
+        } finally {
+            this.isProcessing.delete(lockKey);
+        }
+    }
+
+    /**
+     * Handle scheduling intent - requires user approval
+     */
+    async handleSchedulingIntent(meetingId, normalized, originalSnippet) {
         const intentType = 'schedule_meeting';
         const lockKey = `${meetingId}_${intentType}`;
 
@@ -105,13 +172,10 @@ class AutomationService {
 
         if (existing) {
             console.log(`[AutomationService] Idempotency Hit: Action already exists for ${meetingId}. Skipping.`);
-            // Note: If we wanted to update the confidence or params, we could do it here, 
-            // but the user's latest prompt says "Do not create a new action" and 
-            // "executed only once". We'll stick to strict idempotency.
             return existing;
         }
 
-        // 4. Grok Refinement
+        // Grok Refinement
         this.isProcessing.add(lockKey);
         try {
             console.log(`[AutomationService] Sending to Grok for precision refinement...`);
@@ -122,7 +186,7 @@ class AutomationService {
                 return null;
             }
 
-            // 5. Create Pending Action
+            // Create Pending Action
             const log = new AutomationLog({
                 meetingId,
                 triggerText: originalSnippet,
@@ -234,10 +298,10 @@ class AutomationService {
 
         try {
             // Convert parameters from Mongoose Map to plain object
-            const originalParams = logDoc.parameters instanceof Map 
-                ? Object.fromEntries(logDoc.parameters) 
+            const originalParams = logDoc.parameters instanceof Map
+                ? Object.fromEntries(logDoc.parameters)
                 : (logDoc.parameters || {});
-            
+
             const editedParams = (logDoc.editedParameters && logDoc.editedParameters.size > 0)
                 ? Object.fromEntries(logDoc.editedParameters)
                 : {};
@@ -289,7 +353,7 @@ class AutomationService {
                 // Set these for easy access in n8n
                 finalParams.recipientEmails = recipientEmails;
                 finalParams.emailBody = emailBody;
-                
+
                 console.log(`[AutomationService] Generated email summary for: ${recipientEmails}`);
             }
 

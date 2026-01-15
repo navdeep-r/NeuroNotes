@@ -2,7 +2,7 @@ const { createMeeting, getMeetingById, getLatestLiveMeeting } = require('../repo
 const { upsertMinuteWindow } = require('../repositories/minuteRepository');
 const LLMService = require('../services/LLMService');
 const SimulationService = require('../services/SimulationService');
-const VisualizationTriggerService = require('../services/VisualizationTriggerService');
+const AutomationService = require('../services/AutomationService');
 const { DEMO_MODE } = require('../config/env');
 
 /**
@@ -18,6 +18,7 @@ const { DEMO_MODE } = require('../config/env');
  * 
  * Handles batches from Transcriptonic Chrome Extension.
  * Maps them to the latest active meeting.
+ * All intents (scheduling, visualization) detected via "hey neuro ... over" pattern.
  */
 exports.ingestWebhook = async (req, res) => {
     try {
@@ -46,7 +47,7 @@ exports.ingestWebhook = async (req, res) => {
         const meetingId = liveMeeting.id || liveMeeting._id;
         console.log(`[Webhook] Attaching ${transcriptBatch.length} chunks to meeting ${meetingId}`);
 
-        const visualizationResults = [];
+        const automationResults = [];
 
         // Process each chunk
         for (const block of transcriptBatch) {
@@ -55,7 +56,7 @@ exports.ingestWebhook = async (req, res) => {
             const windowEnd = new Date(windowStart);
             windowEnd.setMinutes(windowEnd.getMinutes() + 1);
 
-            const minuteWindow = await upsertMinuteWindow(meetingId, {
+            await upsertMinuteWindow(meetingId, {
                 startTime: windowStart,
                 endTime: windowEnd,
                 transcript: block.transcriptText,
@@ -63,25 +64,29 @@ exports.ingestWebhook = async (req, res) => {
                 processed: false,
             });
 
-            // Process transcript line for visualization triggers
-            // "Hey NeuroNotes" starts capture, "cool neuronotes" stops and generates
-            const triggerResult = await VisualizationTriggerService.processLine(
-                meetingId,
-                block.transcriptText,
-                block.personName,
-                minuteWindow?.id || minuteWindow?._id || 'unknown'
-            );
+            // Process transcript via unified automation pipeline
+            // Detects "hey neuro ... over" and routes to:
+            // - Visualization intent -> auto-generates chart
+            // - Scheduling intent -> creates pending action for approval
+            const result = await AutomationService.processChunk(meetingId, {
+                text: block.transcriptText,
+                speaker: block.personName
+            });
 
-            if (triggerResult.triggered && triggerResult.visual) {
-                console.log(`[Webhook] Visualization generated: ${triggerResult.visual.title}`);
-                visualizationResults.push(triggerResult.visual);
+            if (result) {
+                automationResults.push(result);
             }
         }
 
+        // Separate visualization and automation results
+        const visualizations = automationResults.filter(r => r.type === 'visualization').map(r => r.visual);
+        const automations = automationResults.filter(r => r.intent); // AutomationLog entries
+
         res.status(200).json({
             success: true,
-            visualizationsGenerated: visualizationResults.length,
-            visualizations: visualizationResults.map(v => ({ id: v._id || v.id, title: v.title }))
+            visualizationsGenerated: visualizations.length,
+            visualizations: visualizations.map(v => ({ id: v._id || v.id, title: v.title })),
+            automationsCreated: automations.length
         });
     } catch (error) {
         console.error('[ingestWebhook] Error:', error);
@@ -139,7 +144,7 @@ exports.ingestChunk = async (req, res) => {
         windowEnd.setMinutes(windowEnd.getMinutes() + 1);
 
         // Write transcript to MinuteWindow
-        const minuteWindow = await upsertMinuteWindow(meetingId, {
+        await upsertMinuteWindow(meetingId, {
             startTime: windowStart,
             endTime: windowEnd,
             transcript: text,
@@ -147,24 +152,28 @@ exports.ingestChunk = async (req, res) => {
             processed: false,
         });
 
-        // Process transcript line for visualization triggers
-        // "Hey NeuroNotes" starts capture, "cool neuronotes" stops and generates
-        const triggerResult = await VisualizationTriggerService.processLine(
-            meetingId,
-            text,
-            speaker,
-            minuteWindow?.id || minuteWindow?._id || 'unknown'
-        );
+        // Process transcript via unified automation pipeline
+        // Detects "hey neuro ... over" and routes to appropriate intent handler
+        const result = await AutomationService.processChunk(meetingId, { text, speaker });
 
         const response = { success: true };
-        if (triggerResult.triggered && triggerResult.visual) {
-            console.log(`[Ingest] Visualization generated: ${triggerResult.visual.title}`);
-            response.visualization = {
-                id: triggerResult.visual._id || triggerResult.visual.id,
-                title: triggerResult.visual.title
-            };
+
+        if (result) {
+            if (result.type === 'visualization' && result.visual) {
+                console.log(`[Ingest] Visualization generated: ${result.visual.title}`);
+                response.visualization = {
+                    id: result.visual._id || result.visual.id,
+                    title: result.visual.title
+                };
+            } else if (result.intent) {
+                console.log(`[Ingest] Automation created: ${result.intent}`);
+                response.automation = {
+                    id: result._id || result.id,
+                    intent: result.intent,
+                    status: result.status
+                };
+            }
         }
-        response.visualizationStatus = triggerResult.status;
 
         res.status(200).json(response);
     } catch (error) {
@@ -210,7 +219,7 @@ exports.startSimulation = async (req, res) => {
  * POST /api/ingest/test-visualization
  * 
  * Test endpoint to simulate visualization trigger flow for a specific meeting.
- * Use this for testing without needing a live meeting or Chrome extension.
+ * Uses the unified "hey neuro ... over" pattern.
  */
 exports.testVisualization = async (req, res) => {
     try {
@@ -228,46 +237,30 @@ exports.testVisualization = async (req, res) => {
 
         console.log(`[TestVisualization] Testing for meeting ${meetingId}`);
 
-        // Simulate the trigger flow
-        const testTranscript = [
-            { text: 'Hey NeuroNotes, create a visualization', speaker: 'Test User' },
-            { text: 'Our Q1 revenue was $500K with 15% growth', speaker: 'Test User' },
-            { text: 'Q2 jumped to $750K, that is 50% increase', speaker: 'Test User' },
-            { text: 'Q3 hit $1.2 million and Q4 projected at $1.5 million', speaker: 'Test User' },
-            { text: 'Thanks NeuroNotes', speaker: 'Test User' }
-        ];
+        // Simulate the unified trigger flow with "hey neuro ... over"
+        const testCommand = 'Hey NeuroNotes, create a chart showing Q1 revenue $500K, Q2 $750K, Q3 $1.2 million, Q4 $1.5 million. Over.';
 
-        let visualResult = null;
+        const result = await AutomationService.processChunk(meetingId, {
+            text: testCommand,
+            speaker: 'Test User'
+        });
 
-        for (const line of testTranscript) {
-            const result = await VisualizationTriggerService.processLine(
-                meetingId,
-                line.text,
-                line.speaker,
-                'test-window'
-            );
-            console.log(`[TestVisualization] Line: "${line.text}" → Status: ${result.status}`);
-
-            if (result.triggered && result.visual) {
-                visualResult = result.visual;
-            }
-        }
-
-        if (visualResult) {
+        if (result && result.type === 'visualization' && result.visual) {
             res.status(200).json({
                 success: true,
                 message: 'Visualization created!',
                 visual: {
-                    id: visualResult._id || visualResult.id,
-                    title: visualResult.title,
-                    type: visualResult.type,
-                    description: visualResult.description
+                    id: result.visual._id || result.visual.id,
+                    title: result.visual.title,
+                    type: result.visual.type,
+                    description: result.visual.description
                 }
             });
         } else {
             res.status(200).json({
                 success: false,
-                message: 'No visualization was generated. Check server logs.'
+                message: 'No visualization was generated. Check server logs.',
+                hint: 'Use format: "Hey NeuroNotes, create a chart about [data]. Over."'
             });
         }
     } catch (error) {
