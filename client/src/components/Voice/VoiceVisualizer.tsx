@@ -55,47 +55,24 @@ export default function VoiceVisualizer({ mode, audioStream, audioElement }: Voi
 
         // Cleanup previous source
         if (sourceRef.current) {
-            sourceRef.current.disconnect()
+            try {
+                sourceRef.current.disconnect()
+            } catch (e) {
+                // Ignore disconnect errors
+            }
             sourceRef.current = null
         }
 
         try {
             if (mode === 'listening' && audioStream) {
-                // Mic Input
+                // Mic Input - this works fine
                 sourceRef.current = ctx.createMediaStreamSource(audioStream)
                 sourceRef.current.connect(analyser)
-            } else if (mode === 'speaking' && audioElement) {
-                // AI Output
-                if (!audioElement.src) return
-
-                try {
-                    // Create source only if we haven't tracked this specific element yet
-                    // Note: MediaElementAudioSourceNode can only be created once per HTMLMediaElement.
-                    // We need to manage this carefuly. 
-                    // A safer pattern for React is to check if we already have a source for this element, 
-                    // but since the element ref might change, we'll try-catch the creation.
-
-                    // Disconnect old if exists (re-routing)
-                    if (sourceRef.current) {
-                        sourceRef.current.disconnect()
-                    }
-
-                    // Create new source
-                    const source = ctx.createMediaElementSource(audioElement)
-                    sourceRef.current = source
-
-                    // Connect to Graph: Source -> Analyser -> Destination
-                    source.connect(analyser)
-                    source.connect(ctx.destination)
-
-                } catch (e) {
-                    // If we get an error, it usually means the element already has a source node.
-                    // In a production app, we'd map elements to sources in a WeakMap context.
-                    // For now, we log it. If it fails, audio usually still plays via normal browser behavior 
-                    // UNLESS the previous source node disconnected it from destination.
-                    console.warn('Re-using audio element source or failed to create:', e)
-                }
             }
+            // NOTE: We intentionally DON'T connect the audioElement to Web Audio API
+            // because createMediaElementSource() redirects audio ONLY through AudioContext,
+            // breaking normal browser playback if AudioContext has issues.
+            // The audio plays fine without visualization; we show a fallback animation instead.
         } catch (err) {
             console.error('Error connecting audio source:', err)
         }

@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { Visualization } from '../../types'
-import { LineChart, BarChart3, Clock, PieChart } from 'lucide-react'
+import { LineChart, BarChart3, Clock, PieChart, RefreshCw } from 'lucide-react'
+import { useAppState } from '../../context/AppContext'
 
 interface VisualizationCardProps {
   visualization: Visualization
@@ -20,19 +22,26 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
 
   // Simple chart representation
   const renderChart = () => {
-    const maxValue = Math.max(...visualization.data.values)
+    const values = visualization.data?.values || []
+    const labels = visualization.data?.labels || []
+
+    if (values.length === 0) {
+      return <p className="text-gray-500 text-sm mt-4">No data available</p>
+    }
+
+    const maxValue = Math.max(...values)
 
     switch (visualization.type) {
       case 'bar':
         return (
           <div className="flex items-end gap-2 h-32 mt-4">
-            {visualization.data.values.map((value, i) => (
+            {values.map((value, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-1">
                 <div
                   className="w-full bg-gradient-to-t from-accent-primary to-accent-secondary rounded-t"
                   style={{ height: `${(value / maxValue) * 100}%` }}
                 />
-                <span className="text-xs text-gray-500">{visualization.data.labels[i]}</span>
+                <span className="text-xs text-gray-500">{labels[i]}</span>
               </div>
             ))}
           </div>
@@ -45,8 +54,8 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
                 fill="none"
                 stroke="url(#lineGradient)"
                 strokeWidth="2"
-                points={visualization.data.values.map((v, i) =>
-                  `${(i / (visualization.data.values.length - 1)) * 100},${50 - (v / maxValue) * 45}`
+                points={values.map((v, i) =>
+                  `${(i / (values.length - 1)) * 100},${50 - (v / maxValue) * 45}`
                 ).join(' ')}
               />
               <defs>
@@ -59,14 +68,14 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
           </div>
         )
       case 'pie':
-        const total = visualization.data.values.reduce((a, b) => a + b, 0)
+        const total = values.reduce((a, b) => a + b, 0)
         const colors = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b']
         let currentAngle = 0
 
         return (
           <div className="flex items-center gap-4 mt-4">
             <svg className="w-24 h-24" viewBox="0 0 32 32">
-              {visualization.data.values.map((value, i) => {
+              {values.map((value, i) => {
                 const angle = (value / total) * 360
                 const startAngle = currentAngle
                 currentAngle += angle
@@ -87,7 +96,7 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
               })}
             </svg>
             <div className="space-y-1">
-              {visualization.data.labels.map((label, i) => (
+              {labels.map((label, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[i % colors.length] }} />
                   <span className="text-gray-400">{label}</span>
@@ -99,16 +108,16 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
       case 'timeline':
         return (
           <div className="mt-4 space-y-2">
-            {visualization.data.labels.map((label, i) => (
+            {labels.map((label, i) => (
               <div key={i} className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 w-8">{label}</span>
+                <span className="text-xs text-gray-500 w-16 truncate">{label}</span>
                 <div className="flex-1 h-2 bg-dark-600 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-accent-primary to-accent-secondary rounded-full"
-                    style={{ width: `${(visualization.data.values[i] / maxValue) * 100}%` }}
+                    style={{ width: `${(values[i] / maxValue) * 100}%` }}
                   />
                 </div>
-                <span className="text-xs text-gray-400 w-6">{visualization.data.values[i]}</span>
+                <span className="text-xs text-gray-400 w-8">{values[i]}</span>
               </div>
             ))}
           </div>
@@ -136,28 +145,131 @@ function VisualizationCard({ visualization }: VisualizationCardProps) {
 
 /**
  * VisualIntelligenceView - Grid of AI-generated visualizations
+ * Fetches from API based on active meeting
  */
 export default function VisualIntelligenceView() {
-  const visualizations: Visualization[] = []
+  const { activeMeetingId, meetings } = useAppState()
+  const [visualizations, setVisualizations] = useState<Visualization[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const activeMeeting = meetings.find(m => m.id === activeMeetingId)
+
+  const fetchVisualizations = async () => {
+    if (!activeMeetingId) {
+      setVisualizations([])
+      return
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch(`http://localhost:5000/api/meetings/${activeMeetingId}/artifacts`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch visualizations')
+      }
+
+      const data = await response.json()
+      // Transform backend format to frontend format
+      const transformedVisuals: Visualization[] = (data.visuals || []).map((v: any) => ({
+        id: v._id || v.id || String(Date.now()),
+        type: v.type || 'bar',
+        title: v.title || 'Untitled',
+        description: v.description || '',
+        data: {
+          labels: v.data?.labels || [],
+          values: v.data?.values || v.data?.datasets?.[0]?.data || []
+        }
+      }))
+
+      setVisualizations(transformedVisuals)
+    } catch (err) {
+      console.error('[VisualIntelligence] Error fetching:', err)
+      setError('Failed to load visualizations')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Fetch on mount and when meeting changes
+  useEffect(() => {
+    fetchVisualizations()
+  }, [activeMeetingId])
+
+  // Auto-refresh every 5 seconds for live updates
+  useEffect(() => {
+    if (!activeMeetingId) return
+
+    const interval = setInterval(fetchVisualizations, 5000)
+    return () => clearInterval(interval)
+  }, [activeMeetingId])
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Visual Intelligence</h1>
-        <p className="text-gray-400 mt-1">AI-generated insights from your meetings</p>
-      </div>
-
-      {/* Visualization Grid */}
-      {visualizations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center glass-card">
-          <BarChart3 className="w-12 h-12 text-gray-600 mb-4" />
-          <h2 className="text-xl font-medium text-white mb-2">No visualizations found</h2>
-          <p className="text-gray-500 max-w-sm">
-            AI-generated charts and insights will appear here once your meetings are processed.
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Visual Intelligence</h1>
+          <p className="text-gray-400 mt-1">
+            {activeMeeting
+              ? `Visualizations for: ${activeMeeting.title}`
+              : 'Select a meeting to view visualizations'}
           </p>
         </div>
-      ) : (
+        {activeMeetingId && (
+          <button
+            onClick={fetchVisualizations}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-accent-primary/10 text-accent-primary rounded-lg hover:bg-accent-primary/20 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        )}
+      </div>
+
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-red-400">
+          {error}
+        </div>
+      )}
+
+      {/* No Meeting Selected */}
+      {!activeMeetingId && (
+        <div className="flex flex-col items-center justify-center py-20 text-center glass-card">
+          <BarChart3 className="w-12 h-12 text-gray-600 mb-4" />
+          <h2 className="text-xl font-medium text-white mb-2">No meeting selected</h2>
+          <p className="text-gray-500 max-w-sm">
+            Select a meeting from the sidebar or History view to see its visualizations.
+          </p>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {activeMeetingId && loading && visualizations.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 text-center glass-card">
+          <RefreshCw className="w-12 h-12 text-accent-primary mb-4 animate-spin" />
+          <h2 className="text-xl font-medium text-white mb-2">Loading visualizations...</h2>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {activeMeetingId && !loading && visualizations.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 text-center glass-card">
+          <BarChart3 className="w-12 h-12 text-gray-600 mb-4" />
+          <h2 className="text-xl font-medium text-white mb-2">No visualizations yet</h2>
+          <p className="text-gray-500 max-w-md">
+            During a meeting, say <span className="text-accent-primary font-mono">"Hey NeuroNotes, create a visualization"</span> to start capturing data.
+            <br /><br />
+            Then say <span className="text-accent-primary font-mono">"Thanks NeuroNotes"</span> or <span className="text-accent-primary font-mono">"Done NeuroNotes"</span> to generate the chart.
+          </p>
+        </div>
+      )}
+
+      {/* Visualization Grid */}
+      {visualizations.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {visualizations.map((viz) => (
             <VisualizationCard key={viz.id} visualization={viz} />
@@ -167,3 +279,4 @@ export default function VisualIntelligenceView() {
     </div>
   )
 }
+

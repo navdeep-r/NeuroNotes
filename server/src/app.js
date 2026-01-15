@@ -7,6 +7,7 @@ const ingestRoutes = require('./routes/ingest.routes');
 const meetingRoutes = require('./routes/meeting.routes');
 const chatRoutes = require('./routes/chat.routes');
 const voiceRoutes = require('./routes/voice.routes');
+const automationRoutes = require('./routes/automation.routes');
 
 const app = express();
 

@@ -2,6 +2,7 @@ const { createMeeting, getMeetingById, getLatestLiveMeeting } = require('../repo
 const { upsertMinuteWindow } = require('../repositories/minuteRepository');
 const LLMService = require('../services/LLMService');
 const SimulationService = require('../services/SimulationService');
+const VisualizationTriggerService = require('../services/VisualizationTriggerService');
 const { DEMO_MODE } = require('../config/env');
 
 /**
@@ -45,25 +46,43 @@ exports.ingestWebhook = async (req, res) => {
         const meetingId = liveMeeting.id || liveMeeting._id;
         console.log(`[Webhook] Attaching ${transcriptBatch.length} chunks to meeting ${meetingId}`);
 
+        const visualizationResults = [];
+
         // Process each chunk
-        // Optimization: We could use batch upsert here in Mongo, but for now loop 
-        // as per existing logic but using Mongo $set.
         for (const block of transcriptBatch) {
             const windowStart = new Date(block.timestamp);
             windowStart.setSeconds(0, 0);
             const windowEnd = new Date(windowStart);
             windowEnd.setMinutes(windowEnd.getMinutes() + 1);
 
-            await upsertMinuteWindow(meetingId, {
+            const minuteWindow = await upsertMinuteWindow(meetingId, {
                 startTime: windowStart,
                 endTime: windowEnd,
                 transcript: block.transcriptText,
                 speaker: block.personName,
                 processed: false,
             });
+
+            // Process transcript line for visualization triggers
+            // "Hey NeuroNotes" starts capture, "cool neuronotes" stops and generates
+            const triggerResult = await VisualizationTriggerService.processLine(
+                meetingId,
+                block.transcriptText,
+                block.personName,
+                minuteWindow?.id || minuteWindow?._id || 'unknown'
+            );
+
+            if (triggerResult.triggered && triggerResult.visual) {
+                console.log(`[Webhook] Visualization generated: ${triggerResult.visual.title}`);
+                visualizationResults.push(triggerResult.visual);
+            }
         }
 
-        res.status(200).json({ success: true });
+        res.status(200).json({
+            success: true,
+            visualizationsGenerated: visualizationResults.length,
+            visualizations: visualizationResults.map(v => ({ id: v._id || v.id, title: v.title }))
+        });
     } catch (error) {
         console.error('[ingestWebhook] Error:', error);
         res.status(500).json({ error: 'Webhook processing failed' });
@@ -119,9 +138,8 @@ exports.ingestChunk = async (req, res) => {
         const windowEnd = new Date(windowStart);
         windowEnd.setMinutes(windowEnd.getMinutes() + 1);
 
-        // Write transcript to Firestore MinuteWindow (Requirement 3.1, 4.2)
-        // Frontend real-time listeners will receive updates automatically
-        await upsertMinuteWindow(meetingId, {
+        // Write transcript to MinuteWindow
+        const minuteWindow = await upsertMinuteWindow(meetingId, {
             startTime: windowStart,
             endTime: windowEnd,
             transcript: text,
@@ -129,7 +147,26 @@ exports.ingestChunk = async (req, res) => {
             processed: false,
         });
 
-        res.status(200).json({ success: true });
+        // Process transcript line for visualization triggers
+        // "Hey NeuroNotes" starts capture, "cool neuronotes" stops and generates
+        const triggerResult = await VisualizationTriggerService.processLine(
+            meetingId,
+            text,
+            speaker,
+            minuteWindow?.id || minuteWindow?._id || 'unknown'
+        );
+
+        const response = { success: true };
+        if (triggerResult.triggered && triggerResult.visual) {
+            console.log(`[Ingest] Visualization generated: ${triggerResult.visual.title}`);
+            response.visualization = {
+                id: triggerResult.visual._id || triggerResult.visual.id,
+                title: triggerResult.visual.title
+            };
+        }
+        response.visualizationStatus = triggerResult.status;
+
+        res.status(200).json(response);
     } catch (error) {
         console.error('[ingestChunk]', error.message);
         res.status(500).json({ error: 'Ingest failed' });
@@ -166,5 +203,75 @@ exports.startSimulation = async (req, res) => {
     } catch (error) {
         console.error('[startSimulation]', error.message);
         res.status(500).json({ error: 'Simulation failed' });
+    }
+};
+
+/**
+ * POST /api/ingest/test-visualization
+ * 
+ * Test endpoint to simulate visualization trigger flow for a specific meeting.
+ * Use this for testing without needing a live meeting or Chrome extension.
+ */
+exports.testVisualization = async (req, res) => {
+    try {
+        const { meetingId } = req.body;
+
+        if (!meetingId) {
+            return res.status(400).json({ error: 'meetingId is required' });
+        }
+
+        // Verify meeting exists
+        const meeting = await getMeetingById(meetingId);
+        if (!meeting) {
+            return res.status(404).json({ error: 'Meeting not found' });
+        }
+
+        console.log(`[TestVisualization] Testing for meeting ${meetingId}`);
+
+        // Simulate the trigger flow
+        const testTranscript = [
+            { text: 'Hey NeuroNotes, create a visualization', speaker: 'Test User' },
+            { text: 'Our Q1 revenue was $500K with 15% growth', speaker: 'Test User' },
+            { text: 'Q2 jumped to $750K, that is 50% increase', speaker: 'Test User' },
+            { text: 'Q3 hit $1.2 million and Q4 projected at $1.5 million', speaker: 'Test User' },
+            { text: 'Thanks NeuroNotes', speaker: 'Test User' }
+        ];
+
+        let visualResult = null;
+
+        for (const line of testTranscript) {
+            const result = await VisualizationTriggerService.processLine(
+                meetingId,
+                line.text,
+                line.speaker,
+                'test-window'
+            );
+            console.log(`[TestVisualization] Line: "${line.text}" → Status: ${result.status}`);
+
+            if (result.triggered && result.visual) {
+                visualResult = result.visual;
+            }
+        }
+
+        if (visualResult) {
+            res.status(200).json({
+                success: true,
+                message: 'Visualization created!',
+                visual: {
+                    id: visualResult._id || visualResult.id,
+                    title: visualResult.title,
+                    type: visualResult.type,
+                    description: visualResult.description
+                }
+            });
+        } else {
+            res.status(200).json({
+                success: false,
+                message: 'No visualization was generated. Check server logs.'
+            });
+        }
+    } catch (error) {
+        console.error('[testVisualization]', error);
+        res.status(500).json({ error: 'Test failed', details: error.message });
     }
 };

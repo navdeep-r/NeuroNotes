@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Mic, MicOff, Volume2, Sparkles, AlertCircle } from 'lucide-react'
+import { X, Mic, MicOff, Sparkles, AlertCircle } from 'lucide-react'
 import VoiceVisualizer from '../Voice/VoiceVisualizer'
 
 interface VoiceSessionModalProps {
@@ -20,7 +20,11 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
     const recognitionRef = useRef<any>(null)
     const mediaStreamRef = useRef<MediaStream | null>(null)
     const audioRef = useRef<HTMLAudioElement | null>(null)
-    const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
+    const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    // State ref to avoid stale closures in event handlers
+    const stateRef = useRef(state)
+    stateRef.current = state
 
     useEffect(() => {
         setMounted(true)
@@ -85,7 +89,8 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
             }
 
             recognition.onend = () => {
-                if (state === 'listening') {
+                // Use stateRef to get current state (avoids stale closure)
+                if (stateRef.current === 'listening') {
                     setState('idle')
                 }
             }
@@ -137,7 +142,10 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
                 body: JSON.stringify({ meetingId, query: text })
             })
 
-            if (!res.ok) throw new Error('API Error')
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}))
+                throw new Error(errorData.error || `API Error: ${res.status}`)
+            }
 
             const data = await res.json()
 
@@ -145,12 +153,16 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
                 console.log('[VoiceSession] Received Audio Response. Length:', data.audio.length)
                 setAiResponse(data.text)
                 playAudioResponse(data.audio)
+            } else if (data.text) {
+                // Text-only response (no audio)
+                setAiResponse(data.text)
+                setState('idle')
             } else {
                 throw new Error('Invalid response format')
             }
-        } catch (err) {
-            console.error(err)
-            setError('Failed to connect to AI.')
+        } catch (err: any) {
+            console.error('[VoiceSession] Error:', err)
+            setError(err.message || 'Failed to connect to AI.')
             setState('idle')
         }
     }
@@ -163,32 +175,42 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
             const audio = new Audio(`data:audio/mpeg;base64,${base64Audio}`)
             audioRef.current = audio;
 
+            // Set state to speaking before attempting play
+            setState('speaking')
+
             audio.onloadedmetadata = () => {
                 console.log('[VoiceSession] Audio metadata loaded. Duration:', audio.duration)
             }
 
             audio.onplay = () => {
                 console.log('[VoiceSession] Audio started playing')
-                setState('speaking')
             }
 
             audio.onended = () => {
                 console.log('[VoiceSession] Audio ended')
                 setState('idle')
+                // Restart listening after agent finishes speaking
+                startListening()
             }
 
-            audio.onerror = (e) => {
-                console.error('[VoiceSession] Audio playback error', (e.target as HTMLAudioElement).error)
-                setError('Failed to play audio response')
+            audio.onerror = () => {
+                const audioError = audio.error
+                console.error('[VoiceSession] Audio playback error', audioError)
+                setError(`Audio playback failed: ${audioError?.message || 'Unknown error'}`)
                 setState('idle')
             }
 
-            const playPromise = audio.play()
-            if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.error('[VoiceSession] Playback prevented:', error)
-                });
-            }
+            // Attempt to play - may require user gesture
+            audio.play().then(() => {
+                console.log('[VoiceSession] Audio playback started successfully')
+            }).catch(error => {
+                console.error('[VoiceSession] Playback prevented:', error)
+                // If autoplay is blocked, show a helpful message
+                if (error.name === 'NotAllowedError') {
+                    setError('Click anywhere to enable audio, then try again.')
+                }
+                setState('idle')
+            });
         } catch (e) {
             console.error('Audio reconstruction error', e)
             setState('idle')
@@ -197,6 +219,10 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
 
 
     if (!isOpen || !mounted) return null
+
+    // Determine mic button state and appearance
+    const isMicActive = state === 'listening'
+    const isMicDisabled = state === 'processing' || state === 'speaking'
 
     return createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
@@ -226,13 +252,13 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
 
                     {/* Status Text Overlay */}
                     <div className="absolute bottom-6 text-center animate-in slide-in-from-bottom-2 fade-in">
-                        <p className={`text-lg font-medium tracking-wide ${state === 'listening' ? 'text-accent-primary animate-pulse' :
+                        <p className={`text-lg font-medium tracking-wide ${state === 'listening' ? 'text-green-400 animate-pulse' :
                             state === 'processing' ? 'text-purple-400' :
                                 state === 'speaking' ? 'text-cyan-400' : 'text-gray-500'
                             }`}>
-                            {state === 'listening' && 'Listening...'}
+                            {state === 'listening' && '🎙️ Listening...'}
                             {state === 'processing' && 'Thinking...'}
-                            {state === 'speaking' && 'Speaking...'}
+                            {state === 'speaking' && '🔊 Speaking...'}
                             {state === 'idle' && 'Ready'}
                         </p>
                     </div>
@@ -263,14 +289,21 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
                     )}
 
                     <div className="flex items-center gap-3 w-full max-w-md">
+                        {/* Microphone Button */}
                         <button
-                            onClick={() => state === 'listening' ? stopListening() : startListening()}
-                            className={`flex-shrink-0 p-4 rounded-full transition-all duration-300 transform hover:scale-105 ${state === 'listening'
-                                ? 'bg-red-500/20 text-red-500 border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
-                                : 'bg-accent-primary text-dark-950 shadow-[0_0_20px_rgba(56,189,248,0.4)] hover:shadow-[0_0_30px_rgba(56,189,248,0.6)]'
+                            onClick={() => isMicActive ? stopListening() : startListening()}
+                            disabled={isMicDisabled}
+                            className={`flex-shrink-0 p-4 rounded-full transition-all duration-300 transform hover:scale-105 
+                                ${isMicActive
+                                    ? 'bg-green-500 text-white shadow-[0_0_20px_rgba(34,197,94,0.5)] animate-pulse'
+                                    : isMicDisabled
+                                        ? 'bg-gray-600/50 text-gray-400 cursor-not-allowed'
+                                        : 'bg-accent-primary text-dark-950 shadow-[0_0_20px_rgba(56,189,248,0.4)] hover:shadow-[0_0_30px_rgba(56,189,248,0.6)]'
                                 }`}
+                            title={isMicActive ? 'Stop listening' : isMicDisabled ? 'Agent is responding...' : 'Start listening'}
                         >
-                            {state === 'listening' ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                            {/* Show regular Mic when listening (user speaking), MicOff when agent is speaking */}
+                            {isMicDisabled ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
                         </button>
 
                         {/* Text Input Fallback */}
@@ -280,7 +313,7 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
                                 const form = e.target as HTMLFormElement
                                 const input = form.elements.namedItem('query') as HTMLInputElement
                                 if (input.value.trim()) {
-                                    if (state === 'listening') stopListening()
+                                    if (isMicActive) stopListening()
                                     processQuery(input.value)
                                     input.value = ''
                                 }
@@ -290,8 +323,9 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
                             <input
                                 name="query"
                                 type="text"
-                                placeholder="Type a message..."
-                                className="w-full bg-white/5 border border-white/10 rounded-full px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-accent-primary/50 focus:bg-white/10 transition-all text-sm backdrop-blur-md"
+                                placeholder={isMicDisabled ? "Agent is responding..." : "Type a message..."}
+                                disabled={isMicDisabled}
+                                className="w-full bg-white/5 border border-white/10 rounded-full px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-accent-primary/50 focus:bg-white/10 transition-all text-sm backdrop-blur-md disabled:opacity-50 disabled:cursor-not-allowed"
                                 autoComplete="off"
                             />
                         </form>

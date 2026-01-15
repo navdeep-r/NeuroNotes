@@ -1,46 +1,88 @@
+/**
+ * VisualEngine - Generates chart configurations from visualization candidates
+ * 
+ * Now supports both:
+ * 1. Pre-built data from LLM analysis (has data.labels and data.values)
+ * 2. Context-based generation for legacy flow (only has context string)
+ */
 class VisualEngine {
     generateChart(candidate) {
-        const { context, text } = candidate;
-        // Simple rule engine
-        if (context === 'financial_growth') {
+        const { context, text, type, data } = candidate;
+
+        // If candidate already has full data structure, use it
+        if (data && data.labels && data.values) {
             return {
-                type: 'line',
-                title: 'Sales Growth',
-                description: 'projected growth over Q1-Q4',
+                type: type || 'bar',
+                title: candidate.title || text || 'Meeting Insight',
+                description: candidate.description || text,
                 data: {
-                    labels: ['Q1', 'Q2', 'Q3', 'Q4'],
-                    datasets: [{
-                        label: 'Sales ($)',
-                        data: [12000, 19000, 3000, 5000],
-                        borderColor: '#4ade80'
-                    }]
+                    labels: data.labels,
+                    values: data.values
                 }
             };
         }
 
-        if (context === 'budget_split') {
+        // Legacy context-based generation
+        if (context === 'financial_growth' || context === 'growth') {
+            return {
+                type: 'line',
+                title: 'Growth Trend',
+                description: text || 'Projected growth over time',
+                data: {
+                    labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+                    values: [12000, 19000, 25000, 35000]
+                }
+            };
+        }
+
+        if (context === 'budget_split' || context === 'budget') {
             return {
                 type: 'pie',
                 title: 'Budget Allocation',
-                description: 'Marketing vs Dev vs Ops',
+                description: text || 'Budget distribution breakdown',
                 data: {
-                    labels: ['Marketing', 'Dev', 'Ops'],
-                    datasets: [{
-                        data: [30, 50, 20],
-                        backgroundColor: ['#f87171', '#60a5fa', '#fbbf24']
-                    }]
+                    labels: ['Marketing', 'Development', 'Operations'],
+                    values: [30, 50, 20]
                 }
             };
         }
 
-        // Default generic
+        if (context === 'performance_metrics' || context === 'comparison') {
+            return {
+                type: 'bar',
+                title: 'Performance Comparison',
+                description: text || 'Comparative analysis',
+                data: {
+                    labels: ['Option A', 'Option B', 'Option C'],
+                    values: [75, 90, 60]
+                }
+            };
+        }
+
+        if (context === 'timeline' || context === 'summary') {
+            return {
+                type: 'timeline',
+                title: 'Timeline',
+                description: text || 'Key milestones',
+                data: {
+                    labels: ['Phase 1', 'Phase 2', 'Phase 3'],
+                    values: [100, 80, 60]
+                }
+            };
+        }
+
+        // Default: bar chart with placeholder data
         return {
-            type: 'generic',
-            title: 'Visual Representation',
-            description: text,
-            data: {}
+            type: type || 'bar',
+            title: text || 'Visual Insight',
+            description: 'Generated from meeting discussion',
+            data: {
+                labels: ['Item 1', 'Item 2', 'Item 3'],
+                values: [50, 75, 60]
+            }
         };
     }
 }
 
 module.exports = new VisualEngine();
+
