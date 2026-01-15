@@ -337,9 +337,9 @@ Please provide a helpful, concise, and well-formatted response using markdown fo
      * Generates comprehensive meeting analytics from transcript data
      * Returns structured analytics for the Insights dashboard
      */
-    async generateMeetingAnalytics(transcript, segments = []) {
-        // Build speaker stats from segments
-        const speakerStats = this.calculateSpeakerStats(segments);
+    async generateMeetingAnalytics(transcript, segments = [], meetingContext = null) {
+        // Build speaker stats from segments with context resolution
+        const speakerStats = this.calculateSpeakerStats(segments, meetingContext);
 
         // Default/mock analytics
         const mockAnalytics = {
@@ -422,8 +422,9 @@ Return ONLY valid JSON:`;
     /**
      * Calculate speaker statistics from transcript segments
      */
-    calculateSpeakerStats(segments) {
+    calculateSpeakerStats(segments, meetingContext = null) {
         if (!segments || segments.length === 0) {
+            // Return mock data if no segments
             return [
                 { speaker: "Speaker A", wordCount: 450, segments: 12, percentage: 40, color: "#6366f1" },
                 { speaker: "Speaker B", wordCount: 380, segments: 10, percentage: 35, color: "#8b5cf6" },
@@ -434,8 +435,39 @@ Return ONLY valid JSON:`;
         const speakerMap = {};
         const colors = ["#6366f1", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#3b82f6"];
 
+        // Helper to resolve relevant participant names from context
+        const resolveSpeakerName = (speakerId) => {
+            // 0. Handle "Unknown" explicitly
+            if (speakerId === 'Unknown') {
+                if (meetingContext && meetingContext.participants && meetingContext.participants.length > 0) {
+                    // Heuristic: Assign "Unknown" to first participant (Host)
+                    const p = meetingContext.participants[0];
+                    return typeof p === 'string' ? p : (p.name || p.email || 'Host');
+                }
+                return 'Unknown Speaker';
+            }
+
+            // 1. If it's already a real name (not an ID/number), return it
+            if (isNaN(speakerId) && speakerId !== '0' && speakerId !== '1') return speakerId;
+
+            // 2. Try to map "0", "1" to participants if available
+            if (meetingContext && meetingContext.participants && meetingContext.participants.length > 0) {
+                const index = parseInt(speakerId);
+                // Simple index mapping: 0 -> 1st participant, 1 -> 2nd participant
+                if (!isNaN(index) && index < meetingContext.participants.length) {
+                    const p = meetingContext.participants[index];
+                    return typeof p === 'string' ? p : (p.name || p.email || `Speaker ${index + 1}`);
+                }
+            }
+
+            // 3. Fallback
+            return speakerId === '0' ? 'Host/User' : (speakerId === '1' ? 'Guest' : `Speaker ${speakerId}`);
+        };
+
         segments.forEach(seg => {
-            const speaker = seg.speaker || "Unknown";
+            const rawSpeaker = seg.speaker || "Unknown";
+            const speaker = resolveSpeakerName(rawSpeaker);
+
             if (!speakerMap[speaker]) {
                 speakerMap[speaker] = { wordCount: 0, segments: 0 };
             }
@@ -451,7 +483,7 @@ Return ONLY valid JSON:`;
             segments: stats.segments,
             percentage: totalWords > 0 ? Math.round((stats.wordCount / totalWords) * 100) : 0,
             color: colors[i % colors.length]
-        }));
+        })).sort((a, b) => b.percentage - a.percentage); // Sort by participation
     }
 
     /**

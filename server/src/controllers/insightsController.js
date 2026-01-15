@@ -38,7 +38,7 @@ exports.getMeetingInsights = async (req, res) => {
         const { actions, decisions } = await getArtifactsByMeeting(id);
 
         // Generate analytics via LLM
-        const analytics = await LLMService.generateMeetingAnalytics(fullTranscript, allSegments);
+        const analytics = await LLMService.generateMeetingAnalytics(fullTranscript, allSegments, meeting);
 
         // Override counts with actual data if available
         if (actions && actions.length > 0) {

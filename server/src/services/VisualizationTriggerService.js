@@ -378,49 +378,46 @@ class VisualizationTriggerService {
             return null;
         }
 
-        const prompt = `You are an expert data visualization analyst. Analyze the following meeting transcript excerpt and generate a HIGHLY REFINED, PRECISE visualization specification.
+        const prompt = `You are an expert data visualization analyst. Your job is to generate a PRECISE chart specification from the transcript below.
 
 ### Transcript:
 ${text}
 
-### Speakers Mentioned:
+### Speakers:
 ${speakers.join(', ')}
 
-### Deep Analysis Instructions:
-1. **Semantic Understanding**: Identify the core topic, metrics, comparisons, or trends being discussed
-2. **Numerical Extraction**: Extract ALL specific numbers, percentages, currencies, or quantities mentioned
-3. **Context Inference**: Understand the business context (sales, performance, budget, timeline, etc.)
-4. **Chart Selection**: Choose the MOST appropriate chart type based on data relationships:
-   - "bar" for comparisons between categories
-   - "line" for trends over time
-   - "pie" for proportions/distributions
-   - "timeline" for chronological milestones
-   - "radial" for progress/gauge metrics
-5. **Rich Metadata**: Generate insightful title, detailed description, and key takeaway
+### INSTRUCTIONS:
+1. **Analyze Content**: Identify what is being measured (metrics) and the relationship between data points.
+2. **Extract Data**: Pull out EXACT numbers. Do not estimate.
+3. **Select Chart Type (CRITICAL)**:
+   - **Line Chart ("line")**: MUST be used for trends over time (e.g., "over Q1-Q4", "growth last year", "monthly revenue").
+   - **Bar Chart ("bar")**: MUST be used for comparing distinct categories (e.g., "Revenue by Product", "Sales per Region", "Team Performance").
+   - **Pie Chart ("pie")**: MUST be used for parts of a whole (e.g., "Budget Split", "Market Share", "percentages totaling 100%").
+   - **Timeline ("timeline")**: Use for sequences of events or milestones.
+   - **Radial ("radial")**: Use for progress towards a goal (0-100%).
 
-### Output Requirements:
-Return ONLY valid JSON with this EXACT structure:
+4. **Generate Output**: Return valid JSON.
+
+### REQUIRED JSON FORMAT:
 {
     "type": "bar|line|pie|timeline|radial",
-    "title": "Precise, contextual title that captures the insight",
-    "description": "2-3 sentence explanation of what this visualization reveals",
-    "insight": "Single key takeaway or business implication",
+    "title": "Clear, Business-Focused Title",
+    "description": "Short explanation of the insight.",
+    "insight": "One specific key takeaway.",
     "data": {
-        "labels": ["Precise Label 1", "Precise Label 2", ...],
-        "values": [exact_number_1, exact_number_2, ...],
-        "units": "USD|%|units|hours|etc"
+        "labels": ["Label1", "Label2", ...],
+        "values": [10, 20, ...], 
+        "units": "$" or "%" or "users" or null
     },
-    "animation": "grow|reveal|pulse",
-    "confidence": 0.0 to 1.0
+    "confidence": 0.9
 }
 
-### Quality Rules:
-- Labels must be specific (e.g., "Q1 2025 Revenue" not "Q1")
-- Values must be exact numbers from the transcript (no estimation)
-- Confidence reflects how clearly the data was stated (1.0 = explicit numbers, 0.5 = inferred)
-- If data is ambiguous or insufficient, return: {"type": null, "reason": "explanation"}
+### EXAMPLES:
+- "Sales grew from 10k in Jan to 15k in Feb" -> Type: "line", Labels: ["Jan", "Feb"], Values: [10000, 15000]
+- "We spent 40% on Ads and 60% on Dev" -> Type: "pie", Labels: ["Ads", "Dev"], Values: [40, 60]
+- "Team A made 50 calls, Team B made 30" -> Type: "bar", Labels: ["Team A", "Team B"], Values: [50, 30]
 
-Generate the visualization specification now:`;
+Return ONLY the JSON.`;
 
         try {
             console.log('[VisualizationTrigger] Sending to Grok for deep refinement...');
