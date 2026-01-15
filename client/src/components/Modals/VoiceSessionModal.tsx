@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Mic, MicOff, Sparkles, AlertCircle } from 'lucide-react'
-import VoiceVisualizer from '../Voice/VoiceVisualizer'
 
 interface VoiceSessionModalProps {
     isOpen: boolean
@@ -15,12 +14,17 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
     const [state, setState] = useState<'idle' | 'listening' | 'processing' | 'speaking'>('idle')
     const [aiResponse, setAiResponse] = useState<string>('')
     const [error, setError] = useState<string | null>(null)
+    const [videosLoaded, setVideosLoaded] = useState(false)
 
     // Audio Refs
     const recognitionRef = useRef<any>(null)
     const mediaStreamRef = useRef<MediaStream | null>(null)
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    // Video Refs
+    const listeningVideoRef = useRef<HTMLVideoElement>(null)
+    const speakingVideoRef = useRef<HTMLVideoElement>(null)
 
     // State ref to avoid stale closures in event handlers
     const stateRef = useRef(state)
@@ -30,6 +34,61 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
         setMounted(true)
         return () => setMounted(false)
     }, [])
+
+    // Preload videos
+    useEffect(() => {
+        if (!isOpen) return
+
+        const loadVideos = async () => {
+            const listeningVideo = listeningVideoRef.current
+            const speakingVideo = speakingVideoRef.current
+
+            if (listeningVideo && speakingVideo) {
+                listeningVideo.load()
+                speakingVideo.load()
+
+                // Wait for both to be ready
+                await Promise.all([
+                    new Promise(resolve => {
+                        listeningVideo.oncanplaythrough = resolve
+                    }),
+                    new Promise(resolve => {
+                        speakingVideo.oncanplaythrough = resolve
+                    })
+                ])
+
+                setVideosLoaded(true)
+            }
+        }
+
+        loadVideos()
+    }, [isOpen])
+
+    // Control video playback based on state
+    useEffect(() => {
+        const listeningVideo = listeningVideoRef.current
+        const speakingVideo = speakingVideoRef.current
+
+        if (!listeningVideo || !speakingVideo) return
+
+        if (state === 'listening' || state === 'processing') {
+            // Play listening video (looped)
+            speakingVideo.pause()
+            speakingVideo.currentTime = 0
+            listeningVideo.play().catch(() => { })
+        } else if (state === 'speaking') {
+            // Play speaking video
+            listeningVideo.pause()
+            speakingVideo.currentTime = 0
+            speakingVideo.play().catch(() => { })
+        } else {
+            // Idle - pause both, show first frame
+            listeningVideo.pause()
+            listeningVideo.currentTime = 0
+            speakingVideo.pause()
+            speakingVideo.currentTime = 0
+        }
+    }, [state])
 
     useEffect(() => {
         if (isOpen) {
@@ -50,7 +109,6 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
             mediaStreamRef.current = stream
 
-            // 2. Start Speech Recognition
             const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
             if (!SpeechRecognition) {
                 setError('Browser does not support Voice Recognition.')
@@ -77,7 +135,7 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
                 if (event.error === 'no-speech') {
                     setState('idle')
                 } else if (event.error === 'network') {
-                    setError('Network error (Speech API unreachable). Please check connection.')
+                    setError('Network error. Please check connection.')
                     setState('idle')
                 } else if (event.error === 'not-allowed') {
                     setError('Microphone permission denied.')
@@ -89,7 +147,6 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
             }
 
             recognition.onend = () => {
-                // Use stateRef to get current state (avoids stale closure)
                 if (stateRef.current === 'listening') {
                     setState('idle')
                 }
@@ -97,7 +154,6 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
 
             recognitionRef.current = recognition
 
-            // Small delay to allow mic stream to settle + prevent race conditions
             setTimeout(() => {
                 try {
                     if (recognitionRef.current) recognition.start()
@@ -150,11 +206,9 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
             const data = await res.json()
 
             if (data.text && data.audio) {
-                console.log('[VoiceSession] Received Audio Response. Length:', data.audio.length)
                 setAiResponse(data.text)
                 playAudioResponse(data.audio)
             } else if (data.text) {
-                // Text-only response (no audio)
                 setAiResponse(data.text)
                 setState('idle')
             } else {
@@ -169,67 +223,46 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
 
     const playAudioResponse = (base64Audio: string) => {
         try {
-            if (audioRef.current) audioRef.current.pause();
+            if (audioRef.current) audioRef.current.pause()
 
-            console.log('[VoiceSession] Creating Audio object...')
             const audio = new Audio(`data:audio/mpeg;base64,${base64Audio}`)
-            audioRef.current = audio;
+            audioRef.current = audio
 
-            // Set state to speaking before attempting play
             setState('speaking')
 
-            audio.onloadedmetadata = () => {
-                console.log('[VoiceSession] Audio metadata loaded. Duration:', audio.duration)
-            }
-
-            audio.onplay = () => {
-                console.log('[VoiceSession] Audio started playing')
-            }
-
             audio.onended = () => {
-                console.log('[VoiceSession] Audio ended')
                 setState('idle')
-                // Restart listening after agent finishes speaking
                 startListening()
             }
 
             audio.onerror = () => {
-                const audioError = audio.error
-                console.error('[VoiceSession] Audio playback error', audioError)
-                setError(`Audio playback failed: ${audioError?.message || 'Unknown error'}`)
+                setError('Audio playback failed')
                 setState('idle')
             }
 
-            // Attempt to play - may require user gesture
-            audio.play().then(() => {
-                console.log('[VoiceSession] Audio playback started successfully')
-            }).catch(error => {
-                console.error('[VoiceSession] Playback prevented:', error)
-                // If autoplay is blocked, show a helpful message
+            audio.play().catch(error => {
                 if (error.name === 'NotAllowedError') {
-                    setError('Click anywhere to enable audio, then try again.')
+                    setError('Click anywhere to enable audio.')
                 }
                 setState('idle')
-            });
+            })
         } catch (e) {
-            console.error('Audio reconstruction error', e)
+            console.error('Audio error', e)
             setState('idle')
         }
     }
 
-
     if (!isOpen || !mounted) return null
 
-    // Determine mic button state and appearance
     const isMicActive = state === 'listening'
     const isMicDisabled = state === 'processing' || state === 'speaking'
 
     return createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
             <div className="relative w-full max-w-2xl bg-dark-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col items-center">
 
                 {/* Header */}
-                <div className="absolute top-0 w-full p-4 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent">
+                <div className="absolute top-0 w-full p-4 flex justify-between items-center z-20 bg-gradient-to-b from-black/70 to-transparent">
                     <div className="flex items-center gap-2 text-white/50 text-sm">
                         <Sparkles className="w-4 h-4 text-accent-primary" />
                         <span>Voice Session • {meetingTitle}</span>
@@ -242,22 +275,47 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
                     </button>
                 </div>
 
-                {/* Main Visualizer Area */}
-                <div className="w-full h-80 bg-gradient-to-b from-dark-950 to-dark-900 flex items-center justify-center relative">
-                    <VoiceVisualizer
-                        mode={state}
-                        audioStream={mediaStreamRef.current}
-                        audioElement={audioRef.current}
+                {/* Video Visualizer Area */}
+                <div className="w-full h-80 bg-dark-950 flex items-center justify-center relative overflow-hidden">
+                    {/* Gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50 z-10 pointer-events-none" />
+
+                    {/* Loading state */}
+                    {!videosLoaded && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-dark-950 z-20">
+                            <div className="w-16 h-16 border-4 border-accent-primary/30 border-t-accent-primary rounded-full animate-spin" />
+                        </div>
+                    )}
+
+                    {/* Listening/Processing Video */}
+                    <video
+                        ref={listeningVideoRef}
+                        src="/videos/ai-voice-mode.mp4"
+                        muted
+                        loop
+                        playsInline
+                        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${state === 'speaking' ? 'opacity-0' : 'opacity-100'
+                            }`}
+                    />
+
+                    {/* Speaking Video */}
+                    <video
+                        ref={speakingVideoRef}
+                        src="/videos/ai-voice-sent.mp4"
+                        muted
+                        playsInline
+                        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${state === 'speaking' ? 'opacity-100' : 'opacity-0'
+                            }`}
                     />
 
                     {/* Status Text Overlay */}
-                    <div className="absolute bottom-6 text-center animate-in slide-in-from-bottom-2 fade-in">
-                        <p className={`text-lg font-medium tracking-wide ${state === 'listening' ? 'text-green-400 animate-pulse' :
+                    <div className="absolute bottom-6 z-20 text-center animate-in slide-in-from-bottom-2 fade-in">
+                        <p className={`text-lg font-medium tracking-wide drop-shadow-lg ${state === 'listening' ? 'text-green-400' :
                             state === 'processing' ? 'text-purple-400' :
-                                state === 'speaking' ? 'text-cyan-400' : 'text-gray-500'
+                                    state === 'speaking' ? 'text-cyan-400' : 'text-gray-400'
                             }`}>
                             {state === 'listening' && '🎙️ Listening...'}
-                            {state === 'processing' && 'Thinking...'}
+                            {state === 'processing' && '✨ Thinking...'}
                             {state === 'speaking' && '🔊 Speaking...'}
                             {state === 'idle' && 'Ready'}
                         </p>
@@ -280,7 +338,6 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
 
                 {/* Controls */}
                 <div className="p-6 w-full flex flex-col items-center justify-center gap-4 bg-dark-950/50">
-                    {/* Error Message (centered above controls) */}
                     {error && (
                         <div className="flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 bg-red-500/10 px-4 py-2 rounded-full border border-red-500/20 mb-2">
                             <AlertCircle className="w-4 h-4 text-red-400" />
@@ -289,7 +346,6 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
                     )}
 
                     <div className="flex items-center gap-3 w-full max-w-md">
-                        {/* Microphone Button */}
                         <button
                             onClick={() => isMicActive ? stopListening() : startListening()}
                             disabled={isMicDisabled}
@@ -298,15 +354,13 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
                                     ? 'bg-green-500 text-white shadow-[0_0_20px_rgba(34,197,94,0.5)] animate-pulse'
                                     : isMicDisabled
                                         ? 'bg-gray-600/50 text-gray-400 cursor-not-allowed'
-                                        : 'bg-accent-primary text-dark-950 shadow-[0_0_20px_rgba(56,189,248,0.4)] hover:shadow-[0_0_30px_rgba(56,189,248,0.6)]'
+                                    : 'bg-accent-primary text-dark-950 shadow-[0_0_20px_rgba(99,102,241,0.4)] hover:shadow-[0_0_30px_rgba(99,102,241,0.6)]'
                                 }`}
                             title={isMicActive ? 'Stop listening' : isMicDisabled ? 'Agent is responding...' : 'Start listening'}
                         >
-                            {/* Show regular Mic when listening (user speaking), MicOff when agent is speaking */}
                             {isMicDisabled ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
                         </button>
 
-                        {/* Text Input Fallback */}
                         <form
                             onSubmit={(e) => {
                                 e.preventDefault()
