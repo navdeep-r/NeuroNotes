@@ -43,17 +43,44 @@ export default function VisualIntelligenceView() {
       }
 
       const data = await response.json()
-      // Transform backend format to frontend format
-      const transformedVisuals: Visualization[] = (data.visuals || []).map((v: any) => ({
-        id: v._id || v.id || String(Date.now()),
-        type: v.type || 'bar',
-        title: v.title || 'Untitled',
-        description: v.description || '',
-        data: {
-          labels: v.data?.labels || [],
-          values: v.data?.values || v.data?.datasets?.[0]?.data || []
+
+      // Transform backend format to frontend format with deduplication
+      const seenTitles = new Set<string>()
+      const transformedVisuals: Visualization[] = []
+
+      for (const v of (data.visuals || [])) {
+        // Deduplicate by title (skip if already seen)
+        const uniqueKey = `${v.title}-${JSON.stringify(v.data?.labels || [])}`
+        if (seenTitles.has(uniqueKey)) continue
+        seenTitles.add(uniqueKey)
+
+        const labels = v.data?.labels || []
+        const values = v.data?.values || v.data?.datasets?.[0]?.data || []
+
+        // Infer chart type based on data if not specified correctly
+        let chartType = v.type || 'bar'
+        if (labels.length > 0 && values.length > 0) {
+          // Smart type inference
+          const hasTimeLabels = labels.some((l: string) =>
+            /min|hour|day|week|month|q[1-4]|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(String(l))
+          )
+          const isDistribution = labels.length <= 5 && values.reduce((a: number, b: number) => a + b, 0) === 100
+
+          if (isDistribution && chartType !== 'pie') {
+            chartType = 'pie'
+          } else if (hasTimeLabels && chartType !== 'line') {
+            chartType = 'line'
+          }
         }
-      }))
+
+        transformedVisuals.push({
+          id: v._id || v.id || `viz-${Date.now()}-${transformedVisuals.length}`,
+          type: chartType,
+          title: v.title || 'Untitled',
+          description: v.description || '',
+          data: { labels, values }
+        })
+      }
 
       setVisualizations(transformedVisuals)
     } catch (err) {

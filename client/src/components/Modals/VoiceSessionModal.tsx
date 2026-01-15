@@ -298,11 +298,12 @@ export default function VoiceSessionModal({ isOpen, onClose, meetingId, meetingT
                             }`}
                     />
 
-                    {/* Speaking Video */}
+                    {/* Speaking Video - Loops while AI is speaking */}
                     <video
                         ref={speakingVideoRef}
                         src="/videos/ai-voice-sent.mp4"
                         muted
+                        loop
                         playsInline
                         className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${state === 'speaking' ? 'opacity-100' : 'opacity-0'
                             }`}

@@ -315,7 +315,12 @@ class AutomationService {
             // For email_summary intent, pre-format recipients and body
             if (logDoc.intent === 'email_summary') {
                 let recipientEmails = '';
-                const recipients = finalParams.recipients;
+                let recipients = finalParams.recipients;
+
+                // If no recipients in original, check if they were added during editing
+                if ((!recipients || recipients.length === 0) && editedParams.recipients) {
+                    recipients = editedParams.recipients;
+                }
 
                 if (Array.isArray(recipients) && recipients.length > 0) {
                     recipientEmails = recipients
@@ -327,7 +332,8 @@ class AutomationService {
                 }
 
                 if (!recipientEmails) {
-                    throw new Error('No valid recipient emails found for summary delivery.');
+                    console.error('[AutomationService] No valid recipient emails found. Please add recipients before approving.');
+                    throw new Error('No valid recipient emails. Please edit the action to add email addresses before approving.');
                 }
 
                 // Generate a beautiful HTML Email Body

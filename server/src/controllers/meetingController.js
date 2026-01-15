@@ -185,87 +185,117 @@ exports.endMeeting = async (req, res) => {
         });
 
         // Stop simulation if it was running for this meeting
-        SimulationService.stopSimulation();
+        try {
+            SimulationService.stopSimulation();
+        } catch (simErr) {
+            console.warn('[endMeeting] Failed to stop simulation:', simErr.message);
+        }
+
+        // Send success response FIRST (don't block on post-meeting automation)
+        res.status(200).json({ success: true, message: 'Meeting ended successfully' });
 
         // ---------------------------------------------------------
         // Post-Meeting Automation: Generate Summary & Prepare Email
+        // (Run async after response is sent)
         // ---------------------------------------------------------
-        const meeting = await getMeetingById(id);
-
-        // Resolve recipients (Fallback to Workspace members if empty)
-        let recipients = (meeting && meeting.selectedRecipients) ? meeting.selectedRecipients : [];
-
-        if (recipients.length === 0 && meeting && meeting.workspaceId) {
+        setImmediate(async () => {
             try {
-                const workspace = await Workspace.findById(meeting.workspaceId);
-                if (workspace && workspace.members && workspace.members.length > 0) {
-                    console.log(`[endMeeting] Using workspace members as recipients: ${workspace.members.length}`);
-                    recipients = workspace.members.map(m => ({
-                        name: m.name,
-                        email: m.email
-                    }));
+                console.log(`[endMeeting] 🚀 Starting post-meeting automation for ${id}`);
+
+                const meeting = await getMeetingById(id);
+                if (!meeting) {
+                    console.error(`[endMeeting] ❌ Meeting ${id} not found after update`);
+                    return;
                 }
-            } catch (err) {
-                console.error('[endMeeting] Failed to fetch workspace members:', err);
-            }
-        }
 
-        if (recipients.length > 0) {
-            console.log(`[endMeeting] Found ${recipients.length} recipients. Generating summary...`);
+                // Resolve recipients (Fallback to Workspace members if empty)
+                let recipients = (meeting.selectedRecipients) ? meeting.selectedRecipients : [];
+                console.log(`[endMeeting] Found ${recipients.length} pre-configured recipients`);
 
-            // 1. Fetch Transcript
-            const minutes = await getMinutesByMeeting(id);
-            const fullTranscript = minutes.flatMap(m => {
-                if (m.segments && m.segments.length > 0) {
-                    return m.segments.map(s => `[${s.speaker}]: ${s.text}`);
+                if (recipients.length === 0 && meeting.workspaceId) {
+                    try {
+                        const workspace = await Workspace.findById(meeting.workspaceId);
+                        if (workspace && workspace.members && workspace.members.length > 0) {
+                            console.log(`[endMeeting] Using workspace members as recipients: ${workspace.members.length}`);
+                            recipients = workspace.members.map(m => ({
+                                name: m.name,
+                                email: m.email
+                            }));
+                        }
+                    } catch (err) {
+                        console.warn('[endMeeting] Failed to fetch workspace members:', err.message);
+                    }
                 }
-                return m.transcript ? [`[${m.speaker || 'Unknown'}]: ${m.transcript}`] : [];
-            }).join('\n');
 
-            if (fullTranscript && fullTranscript.length > 50) {
-                // 2. Generate Summary via LLM
-                const summaryData = await LLMService.generateSummary(fullTranscript);
+                // Fetch Transcript
+                const minutes = await getMinutesByMeeting(id);
+                console.log(`[endMeeting] Fetched ${minutes.length} minute chunks`);
 
-                // 3. Update Meeting with Summary
-                await updateMeeting(id, {
-                    summary: {
-                        keyPoints: summaryData.keyPoints || [],
-                        decisions: summaryData.decisions || [],
-                        actionItems: summaryData.actionItems || [],
-                        opportunities: summaryData.opportunities || [],
-                        risks: summaryData.risks || [],
-                        eligibility: summaryData.eligibility || [],
-                        questions: summaryData.questions || []
+                const fullTranscript = minutes.flatMap(m => {
+                    if (m.segments && m.segments.length > 0) {
+                        return m.segments.map(s => `[${s.speaker}]: ${s.text}`);
                     }
-                });
+                    return m.transcript ? [`[${m.speaker || 'Unknown'}]: ${m.transcript}`] : [];
+                }).join('\n');
 
-                // 4. Create Pending "Email Summary" Automation
-                await AutomationLog.create({
-                    meetingId: id,
-                    triggerText: 'Meeting Ended (Auto-Trigger)',
-                    intent: 'email_summary',
-                    status: 'pending',
-                    parameters: {
-                        recipients: recipients,
-                        summary: summaryData,
-                        meetingTitle: meeting.title,
-                        meetingDate: meeting.startTime,
-                        workspaceId: meeting.workspaceId
-                    }
-                });
+                console.log(`[endMeeting] Full transcript length: ${fullTranscript.length} chars`);
 
-                console.log(`[endMeeting] Created pending email_summary automation for meeting ${id}`);
-            } else {
-                console.warn('[endMeeting] Transcript too short for summary/email automation.');
+                // Lower threshold to 20 chars for testing
+                if (fullTranscript && fullTranscript.length > 20) {
+                    console.log(`[endMeeting] Generating summary for meeting ${id}...`);
+
+
+                    // Generate Summary via LLM
+                    const summaryData = await LLMService.generateSummary(fullTranscript);
+
+                    // Update Meeting with Summary
+                    await updateMeeting(id, {
+                        summary: {
+                            keyPoints: summaryData.keyPoints || [],
+                            decisions: summaryData.decisions || [],
+                            actionItems: summaryData.actionItems || [],
+                            opportunities: summaryData.opportunities || [],
+                            risks: summaryData.risks || [],
+                            eligibility: summaryData.eligibility || [],
+                            questions: summaryData.questions || []
+                        }
+                    });
+
+                    console.log(`[endMeeting] ✅ Summary generated for meeting ${id}`);
+
+                    // ALWAYS create pending email automation (user can add recipients during approval)
+                    const automation = await AutomationLog.create({
+                        meetingId: id,
+                        triggerText: 'Meeting Ended - Send Summary Email',
+                        intent: 'email_summary',
+                        status: 'pending',
+                        parameters: {
+                            recipients: recipients,
+                            summary: summaryData,
+                            meetingTitle: meeting.title,
+                            meetingDate: meeting.startTime,
+                            workspaceId: meeting.workspaceId,
+                            requiresRecipients: recipients.length === 0
+                        }
+                    });
+
+                    console.log(`[endMeeting] ✅ Created pending email_summary automation: ${automation._id}`);
+                    console.log(`[endMeeting] Recipients configured: ${recipients.length > 0 ? recipients.map(r => r.email).join(', ') : 'NONE (user must add)'}`);
+
+                } else {
+                    console.warn(`[endMeeting] ⚠️ Transcript too short (${fullTranscript?.length || 0} chars) for summary generation.`);
+                }
+            } catch (postErr) {
+                console.error('[endMeeting] Post-meeting automation error:', postErr.message);
             }
-        }
+        });
 
-        res.status(200).json({ success: true, message: 'Meeting ended and processing initiated' });
     } catch (err) {
         console.error('[endMeeting]', err.message);
         res.status(500).json({ error: 'Failed to end meeting' });
     }
 };
+
 
 /**
  * POST /api/meetings/:id/generate-summary

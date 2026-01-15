@@ -13,7 +13,7 @@ const AutomationLogSchema = new mongoose.Schema({
     intent: {
         type: String,
         required: true,
-        enum: ['schedule_meeting', 'create_ticket', 'send_email', 'other']
+        enum: ['schedule_meeting', 'create_ticket', 'send_email', 'email_summary', 'create_visualization', 'other']
     },
     parameters: {
         type: mongoose.Schema.Types.Mixed,
