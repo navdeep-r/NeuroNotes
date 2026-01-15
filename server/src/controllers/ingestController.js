@@ -56,11 +56,22 @@ exports.ingestWebhook = async (req, res) => {
             const windowEnd = new Date(windowStart);
             windowEnd.setMinutes(windowEnd.getMinutes() + 1);
 
+            // Enhanced Speaker Resolution
+            let resolvedSpeaker = block.personName;
+            if (!resolvedSpeaker || resolvedSpeaker.toLowerCase() === 'unknown' || resolvedSpeaker === '0') {
+                if (liveMeeting.participants && liveMeeting.participants.length > 0) {
+                    const p = liveMeeting.participants[0];
+                    resolvedSpeaker = typeof p === 'string' ? p : (p.name || p.email || 'Host');
+                } else {
+                    resolvedSpeaker = 'Host';
+                }
+            }
+
             await upsertMinuteWindow(meetingId, {
                 startTime: windowStart,
                 endTime: windowEnd,
                 transcript: block.transcriptText,
-                speaker: block.personName,
+                speaker: resolvedSpeaker,
                 processed: false,
             });
 
@@ -70,7 +81,7 @@ exports.ingestWebhook = async (req, res) => {
             // - Scheduling intent -> creates pending action for approval
             const result = await AutomationService.processChunk(meetingId, {
                 text: block.transcriptText,
-                speaker: block.personName
+                speaker: resolvedSpeaker
             });
 
             if (result) {
@@ -143,18 +154,30 @@ exports.ingestChunk = async (req, res) => {
         const windowEnd = new Date(windowStart);
         windowEnd.setMinutes(windowEnd.getMinutes() + 1);
 
+        // Enhanced Speaker Resolution
+        let resolvedSpeaker = speaker;
+        if (!resolvedSpeaker || resolvedSpeaker.toLowerCase() === 'unknown' || resolvedSpeaker === '0') {
+            // Heuristic: Assign to first participant (Host) if unknown
+            if (meeting.participants && meeting.participants.length > 0) {
+                const p = meeting.participants[0];
+                resolvedSpeaker = typeof p === 'string' ? p : (p.name || p.email || 'Host');
+            } else {
+                resolvedSpeaker = 'Host';
+            }
+        }
+
         // Write transcript to MinuteWindow
         await upsertMinuteWindow(meetingId, {
             startTime: windowStart,
             endTime: windowEnd,
             transcript: text,
-            speaker: speaker,
+            speaker: resolvedSpeaker,
             processed: false,
         });
 
         // Process transcript via unified automation pipeline
         // Detects "hey neuro ... over" and routes to appropriate intent handler
-        const result = await AutomationService.processChunk(meetingId, { text, speaker });
+        const result = await AutomationService.processChunk(meetingId, { text, speaker: resolvedSpeaker });
 
         const response = { success: true };
 
