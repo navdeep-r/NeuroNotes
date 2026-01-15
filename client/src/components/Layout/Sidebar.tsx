@@ -8,10 +8,12 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  PlusCircle
+  PlusCircle,
+  Zap
 } from 'lucide-react'
 import { useAppState, useAppActions } from '../../context/AppContext'
 import MeetingList from '../MeetingList/MeetingList'
+
 
 interface NavItemData {
   id: string
@@ -23,6 +25,7 @@ interface NavItemData {
 const navItems: NavItemData[] = [
   { id: 'dashboard', label: 'Dashboard', route: '/dashboard', icon: LayoutDashboard },
   { id: 'live', label: 'Live Meeting', route: '/live', icon: Radio },
+  { id: 'actions', label: 'Actions', route: '/actions', icon: Zap },
   { id: 'history', label: 'Meetings History', route: '/history', icon: History },
   { id: 'visuals', label: 'Visual Intelligence', route: '/visuals', icon: BarChart3 },
   { id: 'insights', label: 'Insights / Analytics', route: '/insights', icon: LineChart },
@@ -38,7 +41,7 @@ const navItems: NavItemData[] = [
 export default function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { sidebarCollapsed, meetings, activeMeetingId } = useAppState()
+  const { sidebarCollapsed, meetings, activeMeetingId, pendingAutomations } = useAppState()
   const { setActiveMeeting, toggleSidebar, setActiveRoute, toggleNewMeetingModal } = useAppActions()
 
   const handleNavClick = (route: string) => {
@@ -100,6 +103,14 @@ export default function Sidebar() {
               <Icon className="w-5 h-5 flex-shrink-0" />
               {!sidebarCollapsed && (
                 <span className="text-sm font-medium">{item.label}</span>
+              )}
+              {item.id === 'actions' && pendingAutomations.length > 0 && (
+                <span className={`
+                  ${sidebarCollapsed ? 'absolute -top-1 -right-1 w-4 h-4 text-[10px]' : 'ml-auto px-2 py-0.5 text-xs'}
+                  flex items-center justify-center rounded-full bg-accent-primary text-white font-bold animate-pulse-live
+                `}>
+                  {pendingAutomations.length}
+                </span>
               )}
               {item.id === 'live' && !sidebarCollapsed && (
                 <span className="ml-auto w-2 h-2 rounded-full bg-red-500 animate-pulse-live" />

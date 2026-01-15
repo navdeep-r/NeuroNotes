@@ -1,6 +1,5 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, ReactNode } from 'react'
-import { AppState, AppActions, TranscriptEntry, Meeting, ChatMessage } from '../types'
-import { mockMeetings } from '../data/mockData'
+import { AppState, AppActions, TranscriptEntry, Meeting, ChatMessage, AutomationEvent } from '../types'
 
 // Initial state
 const initialState: AppState = {
@@ -18,6 +17,7 @@ const initialState: AppState = {
   aiResponse: null,
   chatHistory: [],
   isProcessingCommand: false,
+  pendingAutomations: [],
 }
 
 // Action types
@@ -39,6 +39,7 @@ type Action =
   | { type: 'SET_AI_RESPONSE'; payload: string | null }
   | { type: 'ADD_CHAT_MESSAGE'; payload: ChatMessage }
   | { type: 'SET_PROCESSING_COMMAND'; payload: boolean }
+  | { type: 'SET_PENDING_AUTOMATIONS'; payload: AutomationEvent[] }
 
 // Reducer
 function appReducer(state: AppState, action: Action): AppState {
@@ -114,6 +115,8 @@ function appReducer(state: AppState, action: Action): AppState {
       return { ...state, chatHistory: [...state.chatHistory, action.payload] }
     case 'SET_PROCESSING_COMMAND':
       return { ...state, isProcessingCommand: action.payload }
+    case 'SET_PENDING_AUTOMATIONS':
+      return { ...state, pendingAutomations: action.payload }
     default:
       return state
   }
@@ -236,6 +239,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.error('Failed to end meeting:', err);
       }
     }, []),
+    setPendingAutomations: useCallback((automations: AutomationEvent[]) => {
+      dispatch({ type: 'SET_PENDING_AUTOMATIONS', payload: automations })
+    }, []),
+    approveAutomation: useCallback(async (id: string, editedParams: Record<string, any>) => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/automation/${id}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ editedParameters: editedParams })
+        })
+        if (res.ok) {
+          // Refresh list
+          const pendingRes = await fetch('http://localhost:5000/api/automation/pending');
+          const pending = await pendingRes.json();
+          dispatch({ type: 'SET_PENDING_AUTOMATIONS', payload: pending });
+
+          // Refresh meetings list in case a meeting was scheduled
+          const meetingsRes = await fetch('http://localhost:5000/api/meetings');
+          const meetingsData = await meetingsRes.json();
+          const realMeetings = meetingsData.map((m: any) => ({
+            id: m.id,
+            title: m.title,
+            status: m.status,
+            startTime: new Date(m.startTime),
+            endTime: m.endTime ? new Date(m.endTime) : undefined,
+            participants: m.participants || [],
+            transcript: [],
+            summary: m.summary || {},
+            meetingLink: m.meetingLink
+          }));
+          dispatch({ type: 'SET_MEETINGS', payload: realMeetings });
+        }
+      } catch (err) {
+        console.error('Failed to approve automation:', err);
+      }
+    }, []),
+    rejectAutomation: useCallback(async (id: string) => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/automation/${id}/reject`, {
+          method: 'POST'
+        });
+        if (res.ok) {
+          // Refresh list
+          const pendingRes = await fetch('http://localhost:5000/api/automation/pending');
+          const pending = await pendingRes.json();
+          dispatch({ type: 'SET_PENDING_AUTOMATIONS', payload: pending });
+        }
+      } catch (err) {
+        console.error('Failed to reject automation:', err);
+      }
+    }, []),
   }
 
   // Fetch initial meetings list
@@ -265,8 +319,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       })
       .catch(err => {
         console.error('Failed to fetch meetings:', err);
-        // Fallback to mock data ONLY if server is unreachable
-        dispatch({ type: 'SET_MEETINGS', payload: mockMeetings });
       })
   }, [])
 
@@ -312,6 +364,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const interval = setInterval(updateTimer, 1000)
     return () => clearInterval(interval)
   }, [state.isLive, state.activeMeetingId, state.meetings])
+
+  // Poll for pending automations
+  useEffect(() => {
+    const fetchPending = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/automation/pending');
+        const data = await res.json();
+
+        // Notification logic if new automation arrived
+        if (data.length > state.pendingAutomations.length) {
+          // Simple browser notification or custom UI notification could go here
+          console.log('⚡ New action detected - pending review');
+        }
+
+        dispatch({ type: 'SET_PENDING_AUTOMATIONS', payload: data });
+      } catch (err) {
+        console.error('Failed to fetch pending automations:', err);
+      }
+    };
+
+    fetchPending();
+    const interval = setInterval(fetchPending, 5000);
+    return () => clearInterval(interval);
+  }, [state.pendingAutomations.length])
 
   return (
     <AppStateContext.Provider value={state}>

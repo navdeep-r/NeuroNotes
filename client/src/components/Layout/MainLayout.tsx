@@ -19,12 +19,17 @@ export default function MainLayout() {
 
   const navigate = useNavigate()
 
-  const handleCreateMeeting = async (title: string, participants: string[]) => {
+  const handleCreateMeeting = async (
+    title: string,
+    participants: string[],
+    workspaceId?: string,
+    selectedRecipients?: { name: string; email: string }[]
+  ) => {
     try {
       const res = await fetch('http://localhost:5000/api/meetings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, participants })
+        body: JSON.stringify({ title, participants, workspaceId, selectedRecipients })
       })
       const newMeeting = await res.json()
 

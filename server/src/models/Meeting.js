@@ -3,9 +3,16 @@ const mongoose = require('mongoose');
 const MeetingSchema = new mongoose.Schema({
     title: { type: String, default: 'Untitled Meeting' },
     status: { type: String, enum: ['live', 'completed', 'scheduled'], default: 'scheduled' },
+    meetingLink: { type: String },
     startTime: { type: Date, default: Date.now },
     endTime: { type: Date },
     participants: [String],
+    // Post-Meeting Email Context
+    workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace' },
+    selectedRecipients: [{
+        name: String,
+        email: String
+    }],
     summary: {
         keyPoints: [String],
         // Enhanced Summary Fields

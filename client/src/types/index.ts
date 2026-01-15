@@ -15,6 +15,31 @@ export interface Highlight {
   text: string
 }
 
+export interface WorkspaceMember {
+  name: string
+  email: string
+}
+
+export interface Workspace {
+  _id: string
+  name: string
+  members: WorkspaceMember[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AutomationEvent {
+  id: string
+  intent: string
+  status: 'pending' | 'approved' | 'rejected' | 'triggered' | 'failed' | 'completed' | 'dismissed'
+  triggerText: string
+  parameters: Record<string, any>
+  editedParameters?: Record<string, any>
+  confidenceScore: number
+  meetingId: string | { id: string; title: string }
+  createdAt: string
+}
+
 export interface TranscriptEntry {
   id: string
   speakerId: string
@@ -22,6 +47,7 @@ export interface TranscriptEntry {
   timestamp: Date
   content: string
   highlights?: Highlight[]
+  automation?: AutomationEvent
 }
 
 export interface Decision {
@@ -58,6 +84,9 @@ export interface Meeting {
   endTime?: Date
   duration?: number
   participants: Speaker[]
+  workspaceId?: string
+  selectedRecipients?: { name: string; email: string }[]
+  meetingLink?: string
   transcript: TranscriptEntry[]
   summary?: MeetingSummary
 }
@@ -151,6 +180,7 @@ export interface AppState {
   aiResponse: string | null
   chatHistory: ChatMessage[]
   isProcessingCommand: boolean
+  pendingAutomations: AutomationEvent[]
 }
 
 export interface AppActions {
@@ -169,4 +199,7 @@ export interface AppActions {
   setAiResponse: (response: string | null) => void
   addChatMessage: (message: ChatMessage) => void
   toggleNewMeetingModal: (isOpen: boolean) => void
+  setPendingAutomations: (automations: AutomationEvent[]) => void
+  approveAutomation: (id: string, editedParams: Record<string, any>) => Promise<void>
+  rejectAutomation: (id: string) => Promise<void>
 }

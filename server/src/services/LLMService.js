@@ -248,6 +248,53 @@ Please provide a helpful, concise, and well-formatted response using markdown fo
         return mockSummary;
     }
 
+    /**
+     * Refines a voice command for scheduling.
+     * Extracts date, time, and other details.
+     */
+    async refineCommand(rawCommand) {
+        if (this.demoMode || !this.apiKey) {
+            // Return semi-realistic fallback if API is down
+            return {
+                title: "Follow-up Meeting",
+                date: "2026-01-15",
+                time: "10:00 AM",
+                confidence: 0.85
+            };
+        }
+
+        const prompt = `You are a scheduling assistant. Extract meeting details from the following voice command.
+        
+        Command: "${rawCommand}"
+        Current Time: ${new Date().toISOString()}
+        
+        Return strictly valid JSON with these fields:
+        {
+            "title": "Meeting Title",
+            "date": "YYYY-MM-DD",
+            "time": "HH:MM AM/PM",
+            "confidence": 0.0 to 1.0,
+            "explanation": "Brief reasoning"
+        }
+        
+        Guidelines:
+        - Resolve relative dates like "tomorrow" or "next Friday" based on the Current Time.
+        - Infer AM/PM logically if not specified.
+        - Normalize the title to something professional.`;
+
+        const response = await this._callGrok(prompt, true);
+        if (response) {
+            try {
+                const cleanJson = response.replace(/```json/g, '').replace(/```/g, '').trim();
+                return JSON.parse(cleanJson);
+            } catch (e) {
+                console.error('Failed to parse refined command JSON', e);
+            }
+        }
+
+        return { title: "New Meeting", date: null, time: null, confidence: 0.5 };
+    }
+
     mockProcess(transcript) {
         // Returns rich mock data for the live "minute" processing
 
