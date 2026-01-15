@@ -1,6 +1,6 @@
 # Firestore Indexes Configuration
 
-This document describes the Firestore indexes required for MinuteFlow.
+This document describes the Firestore indexes required for NeuroNotes.
 
 ## Index File
 

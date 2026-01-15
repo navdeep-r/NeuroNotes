@@ -70,7 +70,7 @@ export default function CommandBar() {
             type="text"
             value={commandInput}
             onChange={(e) => setCommandInput(e.target.value)}
-            placeholder="Type /summary, /actions or ask a question…"
+            placeholder="Ask NeuroNotes to create a chart, assign an action, or type /summary..."
             className="w-full bg-dark-700/50 border border-white/10 rounded-xl px-4 py-3 
                        text-white placeholder-gray-500 focus:outline-none focus:border-accent-primary/50
                        focus:ring-2 focus:ring-accent-primary/20 transition-smooth"

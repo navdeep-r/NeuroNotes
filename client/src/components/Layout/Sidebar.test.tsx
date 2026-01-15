@@ -25,7 +25,7 @@ const renderSidebar = () => {
 
 /**
  * Tests for Sidebar navigation
- * Feature: minuteflow-frontend, Property 1, 2, 3, 5
+ * Feature: neuronotes-frontend, Property 1, 2, 3, 5
  * Validates: Requirements 2.2, 2.3, 2.5, 3.5
  */
 describe('Sidebar Navigation Properties', () => {

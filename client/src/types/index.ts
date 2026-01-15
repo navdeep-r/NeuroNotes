@@ -1,4 +1,4 @@
-// Core entity types for MinuteFlow
+// Core entity types for NeuroNotes
 
 export interface Speaker {
   id: string

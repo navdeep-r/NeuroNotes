@@ -346,7 +346,7 @@ class AutomationService {
                         ${actionsHtml ? `<h3>Action Items</h3><ul>${actionsHtml}</ul>` : ''}
                         
                         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                        <p style="font-size: 12px; color: #999;">Sent via MinuteFlow AI Intelligence</p>
+                        <p style="font-size: 12px; color: #999;">Sent via NeuroNotes AI Intelligence</p>
                     </div>
                 `;
 

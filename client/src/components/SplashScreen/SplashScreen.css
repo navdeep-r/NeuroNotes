@@ -1,0 +1,161 @@
+/* =========================================
+   NeuroNotes Splash Screen Animations
+   ========================================= */
+
+.splash-container {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0a0a0f 100%);
+  overflow: hidden;
+}
+
+/* Ambient background glow */
+.splash-container::before {
+  content: '';
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+  animation: ambientPulse 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Logo container */
+.logo-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: logoReveal 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  opacity: 0;
+  transform: scale(0.7);
+}
+
+/* Logo icon */
+.logo-icon {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 24px;
+  filter: drop-shadow(0 0 30px rgba(99, 102, 241, 0.5));
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+/* Brand name */
+.brand-name {
+  font-size: 2.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #ffffff 0%, #a5b4fc 50%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+}
+
+/* Tagline container */
+.tagline-container {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  margin-top: 8px;
+}
+
+/* Typing text */
+.tagline {
+  font-size: 1.1rem;
+  color: rgba(156, 163, 175, 0.9);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 2px solid rgba(99, 102, 241, 0.8);
+  animation: 
+    typing 1.8s steps(32) 0.6s forwards,
+    blink 0.6s step-end infinite;
+  width: 0;
+}
+
+/* Fade out animation */
+.splash-exit {
+  animation: fadeOut 0.5s ease-out forwards;
+}
+
+/* =========== KEYFRAMES =========== */
+
+@keyframes logoReveal {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 25px rgba(99, 102, 241, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 40px rgba(139, 92, 246, 0.6));
+  }
+}
+
+@keyframes ambientPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+}
+
+@keyframes typing {
+  0% {
+    width: 0;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+@keyframes blink {
+  0%, 50% {
+    border-color: rgba(99, 102, 241, 0.8);
+  }
+  51%, 100% {
+    border-color: transparent;
+  }
+}
+
+@keyframes fadeOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* Main app fade in */
+.app-enter {
+  animation: appFadeIn 0.4s ease-out forwards;
+}
+
+@keyframes appFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}

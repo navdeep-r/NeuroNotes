@@ -1,88 +1,57 @@
 /**
- * VisualEngine - Generates chart configurations from visualization candidates
+ * VisualEngine - Transforms Grok-refined visualization specs into chart configs
  * 
- * Now supports both:
- * 1. Pre-built data from LLM analysis (has data.labels and data.values)
- * 2. Context-based generation for legacy flow (only has context string)
+ * STRICT PIPELINE: Only accepts validated Grok output with complete data
+ * No fallbacks to mock/placeholder data
  */
 class VisualEngine {
+    /**
+     * Generate chart configuration from Grok-refined candidate
+     * @param {Object} candidate - Must have type, title, description, data.labels, data.values
+     * @returns {Object|null} Chart configuration or null if invalid
+     */
     generateChart(candidate) {
-        const { context, text, type, data } = candidate;
-
-        // If candidate already has full data structure, use it
-        if (data && data.labels && data.values) {
-            return {
-                type: type || 'bar',
-                title: candidate.title || text || 'Meeting Insight',
-                description: candidate.description || text,
-                data: {
-                    labels: data.labels,
-                    values: data.values
-                }
-            };
+        // Validate required fields from Grok
+        if (!this.validateCandidate(candidate)) {
+            console.warn('[VisualEngine] Invalid candidate - missing required fields');
+            return null;
         }
 
-        // Legacy context-based generation
-        if (context === 'financial_growth' || context === 'growth') {
-            return {
-                type: 'line',
-                title: 'Growth Trend',
-                description: text || 'Projected growth over time',
-                data: {
-                    labels: ['Q1', 'Q2', 'Q3', 'Q4'],
-                    values: [12000, 19000, 25000, 35000]
-                }
-            };
-        }
+        const { type, title, description, insight, data, animation, confidence } = candidate;
 
-        if (context === 'budget_split' || context === 'budget') {
-            return {
-                type: 'pie',
-                title: 'Budget Allocation',
-                description: text || 'Budget distribution breakdown',
-                data: {
-                    labels: ['Marketing', 'Development', 'Operations'],
-                    values: [30, 50, 20]
-                }
-            };
-        }
-
-        if (context === 'performance_metrics' || context === 'comparison') {
-            return {
-                type: 'bar',
-                title: 'Performance Comparison',
-                description: text || 'Comparative analysis',
-                data: {
-                    labels: ['Option A', 'Option B', 'Option C'],
-                    values: [75, 90, 60]
-                }
-            };
-        }
-
-        if (context === 'timeline' || context === 'summary') {
-            return {
-                type: 'timeline',
-                title: 'Timeline',
-                description: text || 'Key milestones',
-                data: {
-                    labels: ['Phase 1', 'Phase 2', 'Phase 3'],
-                    values: [100, 80, 60]
-                }
-            };
-        }
-
-        // Default: bar chart with placeholder data
         return {
             type: type || 'bar',
-            title: text || 'Visual Insight',
-            description: 'Generated from meeting discussion',
+            title: title,
+            description: description,
+            insight: insight || null,
+            animation: animation || 'grow',
+            confidence: confidence || 0.8,
             data: {
-                labels: ['Item 1', 'Item 2', 'Item 3'],
-                values: [50, 75, 60]
+                labels: data.labels,
+                values: data.values,
+                units: data.units || null
             }
         };
+    }
+
+    /**
+     * Validate that candidate has all required fields from Grok refinement
+     */
+    validateCandidate(candidate) {
+        if (!candidate) return false;
+        if (!candidate.type) return false;
+        if (!candidate.title) return false;
+        if (!candidate.data) return false;
+        if (!Array.isArray(candidate.data.labels) || candidate.data.labels.length < 2) return false;
+        if (!Array.isArray(candidate.data.values) || candidate.data.values.length < 2) return false;
+        if (candidate.data.labels.length !== candidate.data.values.length) return false;
+
+        // All values must be valid numbers
+        const allNumbers = candidate.data.values.every(v => typeof v === 'number' && !isNaN(v));
+        if (!allNumbers) return false;
+
+        return true;
     }
 }
 
 module.exports = new VisualEngine();
-

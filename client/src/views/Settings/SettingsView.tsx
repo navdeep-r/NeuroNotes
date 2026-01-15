@@ -137,7 +137,7 @@ export default function SettingsView() {
 
         <SettingsSection
           title="Help & Support"
-          description="Get help and learn more about MinuteFlow"
+          description="Get help and learn more about NeuroNotes"
           icon={HelpCircle}
         >
           <div className="space-y-2">

@@ -16,7 +16,7 @@ const renderCommandBar = () => {
 
 /**
  * Tests for CommandBar component
- * Feature: minuteflow-frontend, Property 11
+ * Feature: neuronotes-frontend, Property 11
  * Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5
  */
 describe('CommandBar', () => {
@@ -24,7 +24,7 @@ describe('CommandBar', () => {
     renderCommandBar()
     
     const input = screen.getByTestId('command-input')
-    expect(input).toHaveAttribute('placeholder', 'Ask MinuteFlow to create a chart or assign an action…')
+    expect(input).toHaveAttribute('placeholder', 'Ask NeuroNotes to create a chart, assign an action, or type /summary...')
   })
 
   it('Should display voice icon', () => {

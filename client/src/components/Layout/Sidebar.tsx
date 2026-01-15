@@ -64,7 +64,7 @@ export default function Sidebar() {
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center">
               <Radio className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold text-lg">MinuteFlow</span>
+            <span className="font-semibold text-lg">NeuroNotes</span>
           </div>
         )}
         <button

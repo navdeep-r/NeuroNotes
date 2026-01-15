@@ -1,5 +1,5 @@
 /**
- * Centralized Error Handler for MinuteFlow
+ * Centralized Error Handler for NeuroNotes
  * 
  * Provides consistent error handling, logging, and response sanitization
  * across the application.

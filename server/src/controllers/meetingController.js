@@ -172,6 +172,12 @@ exports.endMeeting = async (req, res) => {
     try {
         const { id } = req.params;
 
+        // Check if meeting exists first
+        const existingMeeting = await getMeetingById(id);
+        if (!existingMeeting) {
+            return res.status(404).json({ error: 'Meeting not found' });
+        }
+
         // Update meeting status to completed
         await updateMeeting(id, {
             status: 'completed',

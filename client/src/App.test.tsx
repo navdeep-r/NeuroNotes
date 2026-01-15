@@ -20,7 +20,7 @@ const renderWithRoute = (route: string) => {
 
 /**
  * Routing property tests
- * Feature: minuteflow-frontend, Property 16, 17, 18
+ * Feature: neuronotes-frontend, Property 16, 17, 18
  * Validates: Requirements 14.2, 14.3, 14.4
  */
 describe('App Routing Properties', () => {

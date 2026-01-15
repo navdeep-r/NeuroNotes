@@ -367,59 +367,98 @@ class VisualizationTriggerService {
     }
 
     /**
-     * Use LLM to analyze transcript content and suggest visualization
+     * Use LLM to deeply analyze transcript content and generate refined visualization spec
+     * This is the core "Grok Deep Refinement" phase - no fallbacks allowed
      */
     async analyzeForVisualization(text, speakers) {
-        const { GROK_API_KEY, DEMO_MODE } = require('../config/env');
+        const { GROK_API_KEY } = require('../config/env');
 
-        // If no API key or demo mode, return mock visualization
-        if (!GROK_API_KEY || DEMO_MODE === 'true') {
-            return this.mockAnalysis(text);
+        if (!GROK_API_KEY) {
+            console.error('[VisualizationTrigger] GROK_API_KEY not configured - cannot generate visualization');
+            return null;
         }
 
-        const prompt = `Analyze the following meeting transcript excerpt and suggest a data visualization.
+        const prompt = `You are an expert data visualization analyst. Analyze the following meeting transcript excerpt and generate a HIGHLY REFINED, PRECISE visualization specification.
 
 ### Transcript:
 ${text}
 
-### Instructions:
-1. Identify if there are any numbers, percentages, comparisons, or trends mentioned.
-2. Suggest the most appropriate chart type: "bar", "line", "pie", or "timeline".
-3. Extract data points and labels from the text.
-4. Provide a title and description.
+### Speakers Mentioned:
+${speakers.join(', ')}
 
-Return ONLY valid JSON in this format:
+### Deep Analysis Instructions:
+1. **Semantic Understanding**: Identify the core topic, metrics, comparisons, or trends being discussed
+2. **Numerical Extraction**: Extract ALL specific numbers, percentages, currencies, or quantities mentioned
+3. **Context Inference**: Understand the business context (sales, performance, budget, timeline, etc.)
+4. **Chart Selection**: Choose the MOST appropriate chart type based on data relationships:
+   - "bar" for comparisons between categories
+   - "line" for trends over time
+   - "pie" for proportions/distributions
+   - "timeline" for chronological milestones
+   - "radial" for progress/gauge metrics
+5. **Rich Metadata**: Generate insightful title, detailed description, and key takeaway
+
+### Output Requirements:
+Return ONLY valid JSON with this EXACT structure:
 {
-    "type": "bar|line|pie|timeline",
-    "title": "Chart Title",
-    "description": "What this chart shows",
-    "context": "category like 'sales', 'performance', 'budget'",
+    "type": "bar|line|pie|timeline|radial",
+    "title": "Precise, contextual title that captures the insight",
+    "description": "2-3 sentence explanation of what this visualization reveals",
+    "insight": "Single key takeaway or business implication",
     "data": {
-        "labels": ["Label1", "Label2", ...],
-        "values": [10, 20, ...]
-    }
+        "labels": ["Precise Label 1", "Precise Label 2", ...],
+        "values": [exact_number_1, exact_number_2, ...],
+        "units": "USD|%|units|hours|etc"
+    },
+    "animation": "grow|reveal|pulse",
+    "confidence": 0.0 to 1.0
 }
 
-If no meaningful visualization can be derived, return:
-{"type": null}`;
+### Quality Rules:
+- Labels must be specific (e.g., "Q1 2025 Revenue" not "Q1")
+- Values must be exact numbers from the transcript (no estimation)
+- Confidence reflects how clearly the data was stated (1.0 = explicit numbers, 0.5 = inferred)
+- If data is ambiguous or insufficient, return: {"type": null, "reason": "explanation"}
+
+Generate the visualization specification now:`;
 
         try {
+            console.log('[VisualizationTrigger] Sending to Grok for deep refinement...');
             const response = await LLMService._callGrok(prompt, true);
-            if (response) {
-                const cleanJson = response.replace(/```json/g, '').replace(/```/g, '').trim();
-                const parsed = JSON.parse(cleanJson);
 
-                if (parsed.type === null) {
-                    return null;
-                }
-                return parsed;
+            if (!response || !response.trim()) {
+                console.error('[VisualizationTrigger] Grok returned empty response');
+                return null;
             }
-        } catch (e) {
-            console.error('[VisualizationTrigger] LLM analysis failed:', e.message);
-        }
 
-        // Fallback to mock
-        return this.mockAnalysis(text);
+            const cleanJson = response.replace(/```json/g, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(cleanJson);
+
+            // Validate Grok output
+            if (parsed.type === null) {
+                console.warn(`[VisualizationTrigger] Grok declined: ${parsed.reason || 'insufficient data'}`);
+                return null;
+            }
+
+            // Validate required fields
+            if (!parsed.data?.labels || !parsed.data?.values || parsed.data.labels.length < 2) {
+                console.warn('[VisualizationTrigger] Grok output missing required data fields');
+                return null;
+            }
+
+            // Validate confidence threshold
+            if (parsed.confidence && parsed.confidence < 0.5) {
+                console.warn(`[VisualizationTrigger] Low confidence (${parsed.confidence}), rejecting`);
+                return null;
+            }
+
+            console.log(`[VisualizationTrigger] Grok refined successfully: ${parsed.title} (confidence: ${parsed.confidence})`);
+            return parsed;
+
+        } catch (e) {
+            console.error('[VisualizationTrigger] Grok analysis failed:', e.message);
+            return null; // No fallback - strict pipeline enforcement
+        }
     }
 
     /**

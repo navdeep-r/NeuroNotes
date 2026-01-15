@@ -1,5 +1,5 @@
 /**
- * Verification script for MinuteFlow Firebase migration
+ * Verification script for NeuroNotes Firebase migration
  * 
  * This script verifies the full flow:
  * 1. Starts a simulation via REST API
@@ -16,7 +16,7 @@ const http = require('http');
 const BASE_URL = 'http://localhost:5000';
 let meetingId = '';
 
-console.log('Starting MinuteFlow verification...\n');
+console.log('Starting NeuroNotes verification...\n');
 
 async function startSimulation() {
     return new Promise((resolve, reject) => {

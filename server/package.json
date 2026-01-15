@@ -1,7 +1,7 @@
 {
-  "name": "minuteflow-server",
+  "name": "neuronotes-server",
   "version": "1.0.0",
-  "description": "MinuteFlow backend server with Firebase/Firestore",
+  "description": "NeuroNotes backend server with Firebase/Firestore",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
