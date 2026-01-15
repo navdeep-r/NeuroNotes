@@ -38,6 +38,7 @@ type Action =
   | { type: 'TOGGLE_NEW_MEETING_MODAL'; payload: boolean }
   | { type: 'SET_AI_RESPONSE'; payload: string | null }
   | { type: 'ADD_CHAT_MESSAGE'; payload: ChatMessage }
+  | { type: 'CLEAR_CHAT' }
   | { type: 'SET_PROCESSING_COMMAND'; payload: boolean }
   | { type: 'SET_PENDING_AUTOMATIONS'; payload: AutomationEvent[] }
 
@@ -113,6 +114,8 @@ function appReducer(state: AppState, action: Action): AppState {
       return { ...state, aiResponse: action.payload }
     case 'ADD_CHAT_MESSAGE':
       return { ...state, chatHistory: [...state.chatHistory, action.payload] }
+    case 'CLEAR_CHAT':
+      return { ...state, chatHistory: [], aiResponse: null, isProcessingCommand: false }
     case 'SET_PROCESSING_COMMAND':
       return { ...state, isProcessingCommand: action.payload }
     case 'SET_PENDING_AUTOMATIONS':
@@ -220,6 +223,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, []),
     addChatMessage: useCallback((message: ChatMessage) => {
       dispatch({ type: 'ADD_CHAT_MESSAGE', payload: message })
+    }, []),
+    clearChat: useCallback(() => {
+      dispatch({ type: 'CLEAR_CHAT' })
     }, []),
     toggleNewMeetingModal: useCallback((isOpen: boolean) => {
       dispatch({ type: 'TOGGLE_NEW_MEETING_MODAL', payload: isOpen })

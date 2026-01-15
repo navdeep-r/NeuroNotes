@@ -1,71 +1,171 @@
-import { TrendingUp, Clock, Target, Lightbulb, ArrowRight, BarChart2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import {
+  TrendingUp, Users, MessageSquare, CheckCircle,
+  Target, Lightbulb, BarChart2, RefreshCw, Brain
+} from 'lucide-react'
+import { useAppState } from '../../context/AppContext'
+import AnimatedChart from '../../components/Charts/AnimatedChart'
+
+interface SpeakerStat {
+  speaker: string
+  wordCount: number
+  segments: number
+  percentage: number
+  color: string
+}
+
+interface TopicItem {
+  topic: string
+  weight: number
+  color?: string
+}
+
+interface EngagementPoint {
+  minute: number
+  activity: number
+}
+
+interface MeetingAnalytics {
+  speakerStats: SpeakerStat[]
+  topicBreakdown: TopicItem[]
+  engagementTimeline: EngagementPoint[]
+  sentimentScore: number
+  sentimentLabel: string
+  decisionCount: number
+  actionCount: number
+  avgResponseTime: number
+  meetingEfficiency: number
+  keyHighlights: string[]
+  meetingTitle?: string
+  meetingDuration?: number
+  status?: string
+}
 
 /**
- * InsightsView - Meeting analytics and recommendations
+ * InsightsView - Comprehensive post-meeting analytics dashboard
  */
 export default function InsightsView() {
-  const timeMetrics = {
-    totalMeetingTime: 0,
-    averageMeetingLength: 0,
-    timeInDecisions: 0,
-    timeInDiscussion: 0,
-  }
-  const trendData: any[] = []
-  const recommendations: any[] = []
+  const { activeMeetingId, meetings } = useAppState()
+  const [analytics, setAnalytics] = useState<MeetingAnalytics | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const formatMinutes = (mins: number): string => {
-    const hours = Math.floor(mins / 60)
-    const minutes = mins % 60
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`
+  const activeMeeting = meetings.find(m => m.id === activeMeetingId)
+
+  const fetchAnalytics = async () => {
+    if (!activeMeetingId) {
+      setAnalytics(null)
+      return
     }
-    return `${minutes}m`
+
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch(`http://localhost:5000/api/meetings/${activeMeetingId}/insights`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch insights')
+      }
+
+      const data = await response.json()
+      setAnalytics(data)
+    } catch (err) {
+      console.error('[Insights] Error:', err)
+      setError('Failed to load analytics')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const maxTrend = trendData.length > 0 ? Math.max(...trendData.map(t => t.value)) : 100
+  useEffect(() => {
+    fetchAnalytics()
+  }, [activeMeetingId])
 
-  const hasData = trendData.length > 0 || recommendations.length > 0 || timeMetrics.totalMeetingTime > 0
+  const getSentimentColor = (score: number) => {
+    if (score >= 0.7) return 'text-green-400'
+    if (score >= 0.4) return 'text-yellow-400'
+    return 'text-red-400'
+  }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 overflow-y-auto">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Insights & Analytics</h1>
-        <p className="text-gray-400 mt-1">Understand your meeting patterns and efficiency</p>
-      </div>
-
-      {!hasData ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center glass-card">
-          <BarChart2 className="w-12 h-12 text-gray-600 mb-4" />
-          <h2 className="text-xl font-medium text-white mb-2">No insight data available</h2>
-          <p className="text-gray-500 max-w-sm">
-            Once you have meetings recorded and processed, AI will generate efficiency metrics and personalized recommendations.
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Brain className="w-7 h-7 text-accent-primary" />
+            Insights & Analytics
+          </h1>
+          <p className="text-gray-400 mt-1">
+            {activeMeeting
+              ? `Deep analysis for: ${activeMeeting.title}`
+              : 'Select a meeting to view comprehensive analytics'}
           </p>
         </div>
-      ) : (
+        {activeMeetingId && (
+          <button
+            onClick={fetchAnalytics}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-accent-primary/10 text-accent-primary rounded-lg hover:bg-accent-primary/20 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        )}
+      </div>
+
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-red-400">
+          {error}
+        </div>
+      )}
+
+      {/* No Meeting Selected */}
+      {!activeMeetingId && (
+        <div className="flex flex-col items-center justify-center py-20 text-center glass-card">
+          <BarChart2 className="w-12 h-12 text-gray-600 mb-4" />
+          <h2 className="text-xl font-medium text-white mb-2">No meeting selected</h2>
+          <p className="text-gray-500 max-w-sm">
+            Select a completed meeting from the sidebar to view comprehensive analytics and insights.
+          </p>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {activeMeetingId && loading && !analytics && (
+        <div className="flex flex-col items-center justify-center py-20 text-center glass-card">
+          <RefreshCw className="w-12 h-12 text-accent-primary mb-4 animate-spin" />
+          <h2 className="text-xl font-medium text-white mb-2">Analyzing meeting...</h2>
+          <p className="text-gray-500">Generating comprehensive insights</p>
+        </div>
+      )}
+
+      {/* Analytics Dashboard */}
+      {analytics && (
         <>
-          {/* Time Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Key Metrics Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="glass-card p-5">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-accent-primary/10">
-                  <Clock className="w-5 h-5 text-accent-primary" />
+                  <CheckCircle className="w-5 h-5 text-accent-primary" />
                 </div>
                 <div>
-                  <p className="text-gray-400 text-sm">Total Meeting Time</p>
-                  <p className="text-xl font-bold text-white">{formatMinutes(timeMetrics.totalMeetingTime)}</p>
+                  <p className="text-gray-400 text-sm">Decisions</p>
+                  <p className="text-2xl font-bold text-white">{analytics.decisionCount}</p>
                 </div>
               </div>
             </div>
 
             <div className="glass-card p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-accent-secondary/10">
-                  <Target className="w-5 h-5 text-accent-secondary" />
+                <div className="p-2 rounded-lg bg-highlight-action/10">
+                  <Target className="w-5 h-5 text-highlight-action" />
                 </div>
                 <div>
-                  <p className="text-gray-400 text-sm">Avg Meeting Length</p>
-                  <p className="text-xl font-bold text-white">{formatMinutes(timeMetrics.averageMeetingLength)}</p>
+                  <p className="text-gray-400 text-sm">Action Items</p>
+                  <p className="text-2xl font-bold text-white">{analytics.actionCount}</p>
                 </div>
               </div>
             </div>
@@ -76,81 +176,127 @@ export default function InsightsView() {
                   <TrendingUp className="w-5 h-5 text-highlight-decision" />
                 </div>
                 <div>
-                  <p className="text-gray-400 text-sm">Time in Decisions</p>
-                  <p className="text-xl font-bold text-white">{formatMinutes(timeMetrics.timeInDecisions)}</p>
+                  <p className="text-gray-400 text-sm">Efficiency</p>
+                  <p className="text-2xl font-bold text-white">{analytics.meetingEfficiency}%</p>
                 </div>
               </div>
             </div>
 
             <div className="glass-card p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-highlight-action/10">
-                  <Clock className="w-5 h-5 text-highlight-action" />
+                <div className={`p-2 rounded-lg ${analytics.sentimentScore >= 0.7 ? 'bg-green-500/10' : analytics.sentimentScore >= 0.4 ? 'bg-yellow-500/10' : 'bg-red-500/10'}`}>
+                  <MessageSquare className={`w-5 h-5 ${getSentimentColor(analytics.sentimentScore)}`} />
                 </div>
                 <div>
-                  <p className="text-gray-400 text-sm">Time in Discussion</p>
-                  <p className="text-xl font-bold text-white">{formatMinutes(timeMetrics.timeInDiscussion)}</p>
+                  <p className="text-gray-400 text-sm">Sentiment</p>
+                  <p className={`text-2xl font-bold ${getSentimentColor(analytics.sentimentScore)}`}>
+                    {analytics.sentimentLabel}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Efficiency Trend */}
-          {trendData.length > 0 && (
-            <div className="glass-card p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">Meeting Efficiency Trend</h2>
-              <div className="h-48 flex items-end gap-2">
-                {trendData.map((point, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                    <div className="w-full flex flex-col items-center">
-                      <span className="text-sm text-accent-primary font-medium mb-1">{point.value}%</span>
-                      <div
-                        className="w-full bg-gradient-to-t from-accent-primary to-accent-secondary rounded-t transition-all duration-500"
-                        style={{ height: `${(point.value / maxTrend) * 120}px` }}
-                      />
-                    </div>
-                    <span className="text-xs text-gray-500">
-                      {new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Charts Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Speaker Participation */}
+            <AnimatedChart
+              type="pie"
+              title="Speaker Participation"
+              description="Distribution of speaking time across participants"
+              data={{
+                labels: analytics.speakerStats.map(s => s.speaker),
+                values: analytics.speakerStats.map(s => s.percentage)
+              }}
+              confidence={0.95}
+            />
 
-          {/* Recommendations */}
-          {recommendations.length > 0 && (
+            {/* Topic Distribution */}
+            <AnimatedChart
+              type="bar"
+              title="Topic Distribution"
+              description="Key topics discussed during the meeting"
+              data={{
+                labels: analytics.topicBreakdown.map(t => t.topic),
+                values: analytics.topicBreakdown.map(t => t.weight),
+                units: '%'
+              }}
+              confidence={0.88}
+            />
+
+            {/* Engagement Timeline */}
+            <AnimatedChart
+              type="line"
+              title="Engagement Over Time"
+              description="Activity level throughout the meeting duration"
+              data={{
+                labels: analytics.engagementTimeline.map(e => `Min ${e.minute}`),
+                values: analytics.engagementTimeline.map(e => e.activity)
+              }}
+              confidence={0.92}
+            />
+
+            {/* Key Highlights */}
             <div className="glass-card p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Lightbulb className="w-5 h-5 text-highlight-action" />
-                <h2 className="text-lg font-semibold text-white">Recommendations</h2>
+                <h3 className="text-lg font-semibold text-white">Key Highlights</h3>
               </div>
               <div className="space-y-3">
-                {recommendations.map((rec) => (
-                  <div
-                    key={rec.id}
-                    className="p-4 rounded-lg bg-dark-700/30 hover:bg-dark-700/50 transition-smooth cursor-pointer group"
+                {analytics.keyHighlights.map((highlight, i) => (
+                  <div 
+                    key={i}
+                    className="flex items-start gap-3 p-3 rounded-lg bg-dark-700/30"
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-medium text-white">{rec.title}</h3>
-                          <span className={`px-2 py-0.5 rounded text-xs ${rec.impact === 'high' ? 'bg-accent-success/20 text-accent-success' :
-                              rec.impact === 'medium' ? 'bg-accent-warning/20 text-accent-warning' :
-                                'bg-gray-500/20 text-gray-400'
-                            }`}>
-                            {rec.impact} impact
-                          </span>
-                        </div>
-                        <p className="text-gray-400 text-sm mt-1">{rec.description}</p>
-                      </div>
-                      <ArrowRight className="w-5 h-5 text-gray-500 group-hover:text-accent-primary transition-smooth" />
+                    <div className="w-6 h-6 rounded-full bg-accent-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-xs font-bold text-accent-primary">{i + 1}</span>
                     </div>
+                    <p className="text-gray-300 text-sm leading-relaxed">{highlight}</p>
                   </div>
                 ))}
               </div>
             </div>
-          )}
+          </div>
+
+          {/* Speaker Details Table */}
+          <div className="glass-card p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="w-5 h-5 text-accent-secondary" />
+              <h3 className="text-lg font-semibold text-white">Speaker Breakdown</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left py-3 px-4 text-gray-400 text-sm font-medium">Speaker</th>
+                    <th className="text-right py-3 px-4 text-gray-400 text-sm font-medium">Words</th>
+                    <th className="text-right py-3 px-4 text-gray-400 text-sm font-medium">Segments</th>
+                    <th className="text-right py-3 px-4 text-gray-400 text-sm font-medium">Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.speakerStats.map((speaker, i) => (
+                    <tr key={i} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: speaker.color }}
+                          />
+                          <span className="text-white font-medium">{speaker.speaker}</span>
+                        </div>
+                      </td>
+                      <td className="text-right py-3 px-4 text-gray-300">{speaker.wordCount.toLocaleString()}</td>
+                      <td className="text-right py-3 px-4 text-gray-300">{speaker.segments}</td>
+                      <td className="text-right py-3 px-4">
+                        <span className="text-accent-primary font-semibold">{speaker.percentage}%</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </>
       )}
     </div>

@@ -7,7 +7,7 @@ import { useAppState, useAppActions } from '../../context/AppContext'
  */
 export default function AIResponseDisplay() {
     const { aiResponse, isProcessingCommand, chatHistory } = useAppState()
-    const { setAiResponse, executeCommand } = useAppActions()
+    const { executeCommand, clearChat } = useAppActions()
     const [copied, setCopied] = useState(false)
     const [inputValue, setInputValue] = useState('')
 
@@ -53,7 +53,7 @@ export default function AIResponseDisplay() {
                     </div>
                     <div className="flex items-center gap-1">
                         <button
-                            onClick={() => setAiResponse(null)}
+                            onClick={() => clearChat()}
                             className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all duration-200"
                         >
                             <Minimize2 className="w-4 h-4" />

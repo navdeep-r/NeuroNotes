@@ -198,6 +198,7 @@ export interface AppActions {
   endMeeting: (meetingId: string) => Promise<void>
   setAiResponse: (response: string | null) => void
   addChatMessage: (message: ChatMessage) => void
+  clearChat: () => void
   toggleNewMeetingModal: (isOpen: boolean) => void
   setPendingAutomations: (automations: AutomationEvent[]) => void
   approveAutomation: (id: string, editedParams: Record<string, any>) => Promise<void>
